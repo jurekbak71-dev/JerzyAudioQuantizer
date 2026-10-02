@@ -25,6 +25,8 @@ juce_add_plugin(JerzyAudioQuantizer
     COPY_PLUGIN_AFTER_BUILD FALSE
 )
 
+juce_generate_juce_header(JerzyAudioQuantizer)
+
 target_sources(JerzyAudioQuantizer PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
