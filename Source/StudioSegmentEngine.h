@@ -33,6 +33,7 @@ public:
 
         stretch.presetDefault(numChannels, sampleRate);
         stretch.reset();
+        latencyHold = getLatencySamples();
     }
 
     void reset()
@@ -44,6 +45,7 @@ public:
         outputAvailable = 0;
         startup = true;
         stretch.reset();
+        latencyHold = getLatencySamples();
     }
 
     void setAnalysisMs(float ms)
@@ -110,6 +112,12 @@ public:
 
         for (int i = 0; i < n; ++i)
         {
+            if (latencyHold > 0)
+            {
+                --latencyHold;
+                continue;
+            }
+
             if (outputAvailable <= 0)
                 continue;
 
@@ -180,24 +188,14 @@ private:
 
         stretch.process(inPtrs.data(), inLen, outPtrs.data(), outLen);
 
-        const int fade = juce::jmin(outLen / 4, static_cast<int>(0.008 * sampleRate));
-
+        // One continuous stretcher state is used across all segments.
+        // Do not add an extra splice/crossfade here: that can smear pick attacks
+        // or create audible repetitions at segment boundaries.
         for (int i = 0; i < outLen; ++i)
         {
             for (int ch = 0; ch < numChannels; ++ch)
-            {
-                float s = tempOut.getSample(ch, i);
+                writeOutputSample(ch, tempOut.getSample(ch, i));
 
-                if (fade > 0 && i < fade && outputAvailable > 0)
-                {
-                    const float t = static_cast<float>(i) / static_cast<float>(fade);
-                    const int prevIndex = (outputWrite - 1 + outputRing.getNumSamples()) % outputRing.getNumSamples();
-                    const float prev = outputRing.getSample(ch, prevIndex);
-                    s = prev * (1.0f - t) + s * t;
-                }
-
-                writeOutputSample(ch, s);
-            }
             advanceOutputWrite();
         }
     }
@@ -210,6 +208,7 @@ private:
     juce::AudioBuffer<float> inputRing, outputRing, tempIn, tempOut;
     int inputWrite = 0, outputWrite = 0, outputRead = 0;
     int outputAvailable = 0;
+    int latencyHold = 0;
 
     std::int64_t absoluteInput = 0;
     std::int64_t committedInput = 0;
