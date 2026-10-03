@@ -11,6 +11,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
+FetchContent_Declare(
+    SIGNALSMITH_STRETCH
+    GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
+    GIT_TAG main
+)
+FetchContent_MakeAvailable(SIGNALSMITH_STRETCH)
+
 juce_add_plugin(JerzyAudioQuantizer
     COMPANY_NAME "Jerzy"
     BUNDLE_ID "pl.jerzy.audioquantizer"
@@ -34,7 +41,7 @@ target_sources(JerzyAudioQuantizer PRIVATE
     Source/PluginEditor.h
     Source/TransientDetector.h
     Source/QuantizerEngine.h
-    Source/WSOLAQuantizeWarper.h
+    Source/StudioSegmentEngine.h
 )
 
 target_compile_features(JerzyAudioQuantizer PRIVATE cxx_std_20)
@@ -54,4 +61,9 @@ target_link_libraries(JerzyAudioQuantizer
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
+)
+
+
+target_include_directories(JerzyAudioQuantizer PRIVATE
+    ${signalsmith_stretch_SOURCE_DIR}
 )
