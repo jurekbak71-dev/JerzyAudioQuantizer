@@ -1,6 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
-#include <signalsmith-stretch.h>
+#include <signalsmith-stretch/signalsmith-stretch.h>
 #include <vector>
 #include <cmath>
 #include <cstdint>
