@@ -18,8 +18,8 @@ JerzyAudioQuantizerAudioProcessorEditor::JerzyAudioQuantizerAudioProcessorEditor
     : AudioProcessorEditor(&p), processor(p)
 {
     setResizable(true, true);
-    setResizeLimits(760, 500, 1500, 980);
-    setSize(1120, 720);
+    setResizeLimits(900, 650, 1600, 1050);
+    setSize(1240, 840);
 
     enabled.setClickingTogglesState(true);
     enabled.setColour(juce::ToggleButton::textColourId, juce::Colours::white);
@@ -28,18 +28,18 @@ JerzyAudioQuantizerAudioProcessorEditor::JerzyAudioQuantizerAudioProcessorEditor
     grid.addItemList({ "AUTO", "1/4", "1/8", "1/16", "1/32", "1/8T", "1/16T" }, 1);
     addAndMakeVisible(grid);
 
-    gridL.setText("SIATKA RYTMU — AUTO jest zalecane do nierównej gry", juce::dontSendNotification);
+    gridL.setText("SIATKA RYTMU — tryb AUTO jest zalecany przy mocno nierównej grze", juce::dontSendNotification);
     gridL.setJustificationType(juce::Justification::centredLeft);
     gridL.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(gridL);
 
-    addKnob(sensitivity, sensitivityL, "CZUŁOŚĆ NA ATAK KOSTKI");
-    addKnob(threshold, thresholdL, "PRÓG IGNOROWANIA SZUMU");
-    addKnob(strength, strengthL, "JAK MOCNO POPRAWIA RYTM");
-    addKnob(window, windowL, "MAKS. BŁĄD DO NAPRAWY");
-    addKnob(analysis, analysisL, "ILE AUDIO ANALIZUJE WCZEŚNIEJ");
-    addKnob(preserve, preserveL, "OCHRONA POCZĄTKU DŹWIĘKU");
-    addKnob(swing, swingL, "SWING SIATKI");
+    addKnob(sensitivity, sensitivityL, "CZUŁOŚĆ ATAKU KOSTKI");
+    addKnob(threshold, thresholdL, "PRÓG SZUMU I PRZECIEKÓW");
+    addKnob(strength, strengthL, "SIŁA KOREKCJI RYTMU");
+    addKnob(window, windowL, "MAKSYMALNY BŁĄD CZASU");
+    addKnob(analysis, analysisL, "DŁUGOŚĆ ANALIZY AUDIO");
+    addKnob(preserve, preserveL, "OCHRONA ATAKU DŹWIĘKU");
+    addKnob(swing, swingL, "SWING RYTMU");
 
     threshold.setTextValueSuffix(" dB");
     strength.setTextValueSuffix(" %");
@@ -83,7 +83,7 @@ void JerzyAudioQuantizerAudioProcessorEditor::addKnob(
     label.setText(text, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::white);
     label.setJustificationType(juce::Justification::centred);
-    label.setMinimumHorizontalScale(0.72f);
+    label.setMinimumHorizontalScale(0.88f);
     addAndMakeVisible(label);
 }
 
@@ -172,22 +172,33 @@ void JerzyAudioQuantizerAudioProcessorEditor::paint(juce::Graphics& g)
 
 void JerzyAudioQuantizerAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced(28);
-    area.removeFromTop(160);
+    auto area = getLocalBounds().reduced(34);
+    area.removeFromTop(172);
 
-    auto setup = area.removeFromTop(72);
-    enabled.setBounds(setup.removeFromLeft(240).reduced(8));
+    auto setup = area.removeFromTop(86);
+    enabled.setBounds(setup.removeFromLeft(280).reduced(12, 16));
 
-    auto gridArea = setup.removeFromLeft(390).reduced(8);
-    gridL.setBounds(gridArea.removeFromTop(24));
-    grid.setBounds(gridArea.removeFromTop(34));
+    setup.removeFromLeft(24);
 
-    area.removeFromTop(8);
+    auto gridArea = setup.removeFromLeft(520).reduced(10, 6);
+    gridL.setBounds(gridArea.removeFromTop(30));
+    gridArea.removeFromTop(4);
+    grid.setBounds(gridArea.removeFromTop(38));
 
-    const int columns = 4;
-    const int rows = 2;
-    const int cellW = area.getWidth() / columns;
-    const int cellH = juce::jmin(180, area.getHeight() / 2);
+    area.removeFromTop(16);
+
+    // Trzy szerokie kolumny zamiast czterech:
+    // podpisy mają więcej miejsca i nie nachodzą na potencjometry.
+    const int columns = 3;
+    const int rows = 3;
+    const int gapX = 18;
+    const int gapY = 14;
+
+    auto controlsArea = area;
+    controlsArea.removeFromBottom(118);
+
+    const int cellW = (controlsArea.getWidth() - gapX * (columns - 1)) / columns;
+    const int cellH = (controlsArea.getHeight() - gapY * (rows - 1)) / rows;
 
     struct Item { Knob* knob; juce::Label* label; };
     Item items[] = {
@@ -206,20 +217,24 @@ void JerzyAudioQuantizerAudioProcessorEditor::resized()
         const int col = i % columns;
 
         juce::Rectangle<int> cell(
-            area.getX() + col * cellW,
-            area.getY() + row * cellH,
+            controlsArea.getX() + col * (cellW + gapX),
+            controlsArea.getY() + row * (cellH + gapY),
             cellW,
             cellH);
 
-        cell.reduce(8, 4);
-        items[i].label->setBounds(cell.removeFromTop(30));
-        items[i].knob->setBounds(cell);
+        cell.reduce(10, 6);
+
+        auto labelArea = cell.removeFromTop(34);
+        items[i].label->setBounds(labelArea);
+
+        cell.removeFromTop(6);
+        items[i].knob->setBounds(cell.reduced(14, 0));
     }
 
-    auto bottom = getLocalBounds().reduced(28);
-    bottom.removeFromTop(160 + cellH * 2 + 8);
-    stats.setBounds(bottom.removeFromTop(28));
-    hint.setBounds(bottom.reduced(4));
+    auto bottom = area.removeFromBottom(108);
+    stats.setBounds(bottom.removeFromTop(30));
+    bottom.removeFromTop(8);
+    hint.setBounds(bottom.reduced(2));
 }
 
 void JerzyAudioQuantizerAudioProcessorEditor::timerCallback()
