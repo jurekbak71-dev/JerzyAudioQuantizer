@@ -8,158 +8,186 @@ namespace Param
     static constexpr auto grid = "grid";
     static constexpr auto strength = "strength";
     static constexpr auto window = "window";
-    static constexpr auto lookahead = "lookahead";
-    static constexpr auto smooth = "smooth";
-    static constexpr auto swing = "swing";
+    static constexpr auto analysis = "analysis";
     static constexpr auto preserve = "preserve";
-    static constexpr auto quality = "quality";
+    static constexpr auto swing = "swing";
 }
 
-JerzyAudioQuantizerAudioProcessorEditor::JerzyAudioQuantizerAudioProcessorEditor (
+JerzyAudioQuantizerAudioProcessorEditor::JerzyAudioQuantizerAudioProcessorEditor(
     JerzyAudioQuantizerAudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : AudioProcessorEditor(&p), processor(p)
 {
-    setResizable (true, true);
-    setResizeLimits (560, 360, 1400, 900);
-    setSize (920, 560);
+    setResizable(true, true);
+    setResizeLimits(760, 500, 1500, 980);
+    setSize(1120, 720);
 
-    enabled.setClickingTogglesState (true);
-    enabled.setColour (juce::ToggleButton::textColourId, juce::Colours::white);
-    addAndMakeVisible (enabled);
+    enabled.setClickingTogglesState(true);
+    enabled.setColour(juce::ToggleButton::textColourId, juce::Colours::white);
+    addAndMakeVisible(enabled);
 
-    grid.addItemList ({ "1/4", "1/8", "1/16", "1/32", "1/8T", "1/16T" }, 1);
-    addAndMakeVisible (grid);
-    gridL.setText ("GRID", juce::dontSendNotification);
-    gridL.setJustificationType (juce::Justification::centred);
-    gridL.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (gridL);
+    grid.addItemList({ "AUTO", "1/4", "1/8", "1/16", "1/32", "1/8T", "1/16T" }, 1);
+    addAndMakeVisible(grid);
 
-    quality.addItemList ({ "LIVE", "STUDIO" }, 1);
-    addAndMakeVisible (quality);
-    qualityL.setText ("QUALITY", juce::dontSendNotification);
-    qualityL.setJustificationType (juce::Justification::centred);
-    qualityL.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (qualityL);
+    gridL.setText("SIATKA RYTMU — AUTO jest zalecane do nierównej gry", juce::dontSendNotification);
+    gridL.setJustificationType(juce::Justification::centredLeft);
+    gridL.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(gridL);
 
-    addKnob (sensitivity, sensitivityL, "SENSITIVITY");
-    addKnob (threshold, thresholdL, "THRESHOLD");
-    addKnob (strength, strengthL, "STRENGTH");
-    addKnob (window, windowL, "WINDOW");
-    addKnob (lookahead, lookaheadL, "LOOKAHEAD");
-    addKnob (smooth, smoothL, "SMOOTH");
-    addKnob (swing, swingL, "SWING");
-    addKnob (preserve, preserveL, "TRANSIENT PRESERVE");
+    addKnob(sensitivity, sensitivityL, "CZUŁOŚĆ NA ATAK KOSTKI");
+    addKnob(threshold, thresholdL, "PRÓG IGNOROWANIA SZUMU");
+    addKnob(strength, strengthL, "JAK MOCNO POPRAWIA RYTM");
+    addKnob(window, windowL, "MAKS. BŁĄD DO NAPRAWY");
+    addKnob(analysis, analysisL, "ILE AUDIO ANALIZUJE WCZEŚNIEJ");
+    addKnob(preserve, preserveL, "OCHRONA POCZĄTKU DŹWIĘKU");
+    addKnob(swing, swingL, "SWING SIATKI");
 
-    threshold.setTextValueSuffix (" dB");
-    strength.setTextValueSuffix (" %");
-    window.setTextValueSuffix (" ms");
-    lookahead.setTextValueSuffix (" ms");
-    smooth.setTextValueSuffix (" ms");
-    swing.setTextValueSuffix (" %");
-    preserve.setTextValueSuffix (" ms");
+    threshold.setTextValueSuffix(" dB");
+    strength.setTextValueSuffix(" %");
+    window.setTextValueSuffix(" ms");
+    analysis.setTextValueSuffix(" ms");
+    preserve.setTextValueSuffix(" ms");
+    swing.setTextValueSuffix(" %");
 
-    status.setJustificationType (juce::Justification::centred);
-    correction.setJustificationType (juce::Justification::centred);
-    status.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
-    correction.setColour (juce::Label::textColourId, juce::Colours::lightgrey);
-    addAndMakeVisible (status);
-    addAndMakeVisible (correction);
+    hint.setText(
+        "Strojenie: 1) ustaw czułość tak, aby wskaźnik ATAK zapalał się tylko przy prawdziwych uderzeniach; "
+        "2) zwiększ maksymalny błąd tylko wtedy, gdy partia jest mocno rozchwiana; "
+        "3) gdy RYZYKO ARTEFAKTÓW rośnie, zmniejsz siłę poprawy lub maksymalny błąd.",
+        juce::dontSendNotification);
+    hint.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    hint.setJustificationType(juce::Justification::topLeft);
+    hint.setMinimumHorizontalScale(0.8f);
+    addAndMakeVisible(hint);
 
-    enabledA = std::make_unique<ButtonAttachment> (processor.apvts, Param::enabled, enabled);
-    gridA = std::make_unique<ComboAttachment> (processor.apvts, Param::grid, grid);
-    qualityA = std::make_unique<ComboAttachment> (processor.apvts, Param::quality, quality);
+    stats.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    stats.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(stats);
 
-    sensitivityA = std::make_unique<SliderAttachment> (processor.apvts, Param::sensitivity, sensitivity);
-    thresholdA = std::make_unique<SliderAttachment> (processor.apvts, Param::threshold, threshold);
-    strengthA = std::make_unique<SliderAttachment> (processor.apvts, Param::strength, strength);
-    windowA = std::make_unique<SliderAttachment> (processor.apvts, Param::window, window);
-    lookaheadA = std::make_unique<SliderAttachment> (processor.apvts, Param::lookahead, lookahead);
-    smoothA = std::make_unique<SliderAttachment> (processor.apvts, Param::smooth, smooth);
-    swingA = std::make_unique<SliderAttachment> (processor.apvts, Param::swing, swing);
-    preserveA = std::make_unique<SliderAttachment> (processor.apvts, Param::preserve, preserve);
+    enabledA = std::make_unique<ButtonAttachment>(processor.apvts, Param::enabled, enabled);
+    gridA = std::make_unique<ComboAttachment>(processor.apvts, Param::grid, grid);
 
-    startTimerHz (30);
+    sensitivityA = std::make_unique<SliderAttachment>(processor.apvts, Param::sensitivity, sensitivity);
+    thresholdA = std::make_unique<SliderAttachment>(processor.apvts, Param::threshold, threshold);
+    strengthA = std::make_unique<SliderAttachment>(processor.apvts, Param::strength, strength);
+    windowA = std::make_unique<SliderAttachment>(processor.apvts, Param::window, window);
+    analysisA = std::make_unique<SliderAttachment>(processor.apvts, Param::analysis, analysis);
+    preserveA = std::make_unique<SliderAttachment>(processor.apvts, Param::preserve, preserve);
+    swingA = std::make_unique<SliderAttachment>(processor.apvts, Param::swing, swing);
+
+    startTimerHz(30);
 }
 
-void JerzyAudioQuantizerAudioProcessorEditor::addKnob (
-    Knob& knob, juce::Label& label, const juce::String& name)
+void JerzyAudioQuantizerAudioProcessorEditor::addKnob(
+    Knob& knob, juce::Label& label, const juce::String& text)
 {
-    addAndMakeVisible (knob);
-    label.setText (name, juce::dontSendNotification);
-    label.setJustificationType (juce::Justification::centred);
-    label.setColour (juce::Label::textColourId, juce::Colours::white);
-    addAndMakeVisible (label);
+    addAndMakeVisible(knob);
+    label.setText(text, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colours::white);
+    label.setJustificationType(juce::Justification::centred);
+    label.setMinimumHorizontalScale(0.72f);
+    addAndMakeVisible(label);
 }
 
-void JerzyAudioQuantizerAudioProcessorEditor::paint (juce::Graphics& g)
+void JerzyAudioQuantizerAudioProcessorEditor::drawMeter(
+    juce::Graphics& g, juce::Rectangle<float> r, float value,
+    const juce::String& title, const juce::String& valueText) const
 {
-    const auto bounds = getLocalBounds().toFloat();
+    value = juce::jlimit(0.0f, 1.0f, value);
 
-    g.fillAll (juce::Colour (0xff0b0d0f));
+    g.setColour(juce::Colour(0xff111417));
+    g.fillRoundedRectangle(r, 7.0f);
 
-    juce::ColourGradient grad (
-        juce::Colour (0xff22272b), bounds.getTopLeft(),
-        juce::Colour (0xff090a0c), bounds.getBottomRight(), false);
-    g.setGradientFill (grad);
-    g.fillRoundedRectangle (bounds.reduced (8.0f), 14.0f);
+    auto bar = r.reduced(8.0f);
+    auto textArea = bar.removeFromTop(22.0f);
 
-    g.setColour (juce::Colour (0xff50565c));
-    g.drawRoundedRectangle (bounds.reduced (9.0f), 14.0f, 1.2f);
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+    g.drawText(title, textArea, juce::Justification::centredLeft);
 
-    auto title = getLocalBounds().removeFromTop (70);
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::FontOptions (28.0f, juce::Font::bold));
-    g.drawFittedText ("JERZY AUDIO QUANTIZER", title, juce::Justification::centred, 1);
+    g.setColour(juce::Colours::lightgrey);
+    g.setFont(juce::FontOptions(12.0f));
+    g.drawText(valueText, textArea, juce::Justification::centredRight);
 
-    const bool tr = processor.transientFlash.load (std::memory_order_relaxed) > 0;
-    const bool cor = processor.correctionFlash.load (std::memory_order_relaxed) > 0;
+    auto meter = bar.reduced(0.0f, 5.0f);
+    g.setColour(juce::Colour(0xff262b30));
+    g.fillRoundedRectangle(meter, 4.0f);
 
-    g.setColour (tr ? juce::Colours::red : juce::Colour (0xff451010));
-    g.fillEllipse (26.0f, 26.0f, 12.0f, 12.0f);
+    auto fill = meter;
+    fill.setWidth(meter.getWidth() * value);
 
-    g.setColour (cor ? juce::Colours::yellow : juce::Colour (0xff4b4510));
-    g.fillEllipse (44.0f, 26.0f, 12.0f, 12.0f);
+    // Intentionally uses neutral UI colours; semantic text carries the meaning.
+    g.setColour(juce::Colour(0xffc8cdd2));
+    g.fillRoundedRectangle(fill, 4.0f);
+}
 
-    const float in = processor.lastInputPeak.load (std::memory_order_relaxed);
-    const float out = processor.lastOutputPeak.load (std::memory_order_relaxed);
+void JerzyAudioQuantizerAudioProcessorEditor::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colour(0xff0b0d0f));
+    const auto b = getLocalBounds().toFloat();
 
-    g.setColour (juce::Colour (0xff141719));
-    g.fillRoundedRectangle (20.0f, bounds.getHeight() - 30.0f, bounds.getWidth() - 40.0f, 8.0f, 4.0f);
+    juce::ColourGradient grad(juce::Colour(0xff252a2f), b.getTopLeft(),
+                              juce::Colour(0xff0c0e10), b.getBottomRight(), false);
+    g.setGradientFill(grad);
+    g.fillRoundedRectangle(b.reduced(8.0f), 15.0f);
 
-    const float meterWidth = (bounds.getWidth() - 40.0f) * 0.5f;
-    g.setColour (juce::Colours::green);
-    g.fillRoundedRectangle (20.0f, bounds.getHeight() - 30.0f,
-                            meterWidth * juce::jlimit (0.0f, 1.0f, in), 8.0f, 4.0f);
-    g.fillRoundedRectangle (20.0f + meterWidth, bounds.getHeight() - 30.0f,
-                            meterWidth * juce::jlimit (0.0f, 1.0f, out), 8.0f, 4.0f);
+    g.setColour(juce::Colour(0xff626970));
+    g.drawRoundedRectangle(b.reduced(9.0f), 15.0f, 1.0f);
+
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::FontOptions(28.0f, juce::Font::bold));
+    g.drawText("JERZY AUDIO QUANTIZER — STUDIO", 24, 18, getWidth()-48, 40, juce::Justification::centred);
+
+    g.setColour(juce::Colours::lightgrey);
+    g.setFont(juce::FontOptions(13.0f));
+    g.drawText("Korekcja rytmu nagranej gitary na podstawie pewnych transjentów i segmentowego time-stretchu",
+               24, 55, getWidth()-48, 24, juce::Justification::centred);
+
+    const float conf = processor.attackConfidence.load();
+    const float ratio = processor.lastStretchRatio.load();
+    const float risk = processor.artifactRisk.load();
+    const float corr = processor.lastCorrectionMs.load();
+
+    auto meterArea = juce::Rectangle<float>(24.0f, 96.0f, getWidth()-48.0f, 76.0f);
+    const float gap = 10.0f;
+    const float w = (meterArea.getWidth() - gap * 2.0f) / 3.0f;
+
+    drawMeter(g, meterArea.removeFromLeft(w), conf,
+              "PEWNOŚĆ: PRAWDZIWY ATAK",
+              juce::String(conf * 100.0f, 0) + " %");
+    meterArea.removeFromLeft(gap);
+
+    const float correctionNorm = juce::jlimit(0.0f, 1.0f, std::abs(corr) / 120.0f);
+    drawMeter(g, meterArea.removeFromLeft(w), correctionNorm,
+              "OSTATNIA KOREKTA",
+              (corr >= 0 ? "+" : "") + juce::String(corr, 1) + " ms");
+    meterArea.removeFromLeft(gap);
+
+    juce::String riskText = "NISKIE";
+    if (risk > 0.66f) riskText = "WYSOKIE — ZMNIEJSZ KOREKTĘ";
+    else if (risk > 0.33f) riskText = "ŚREDNIE";
+
+    drawMeter(g, meterArea, risk,
+              "RYZYKO ARTEFAKTÓW",
+              riskText + "   stretch " + juce::String(ratio, 3) + "x");
 }
 
 void JerzyAudioQuantizerAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced (28);
-    area.removeFromTop (70);
-    area.removeFromBottom (44);
+    auto area = getLocalBounds().reduced(28);
+    area.removeFromTop(160);
 
-    auto top = area.removeFromTop (72);
-    enabled.setBounds (top.removeFromLeft (150).reduced (10));
+    auto setup = area.removeFromTop(72);
+    enabled.setBounds(setup.removeFromLeft(240).reduced(8));
 
-    auto gridArea = top.removeFromLeft (150).reduced (8);
-    gridL.setBounds (gridArea.removeFromTop (20));
-    grid.setBounds (gridArea.reduced (4));
+    auto gridArea = setup.removeFromLeft(390).reduced(8);
+    gridL.setBounds(gridArea.removeFromTop(24));
+    grid.setBounds(gridArea.removeFromTop(34));
 
-    auto qualityArea = top.removeFromLeft (150).reduced (8);
-    qualityL.setBounds (qualityArea.removeFromTop (20));
-    quality.setBounds (qualityArea.reduced (4));
-
-    status.setBounds (top.removeFromLeft (130).reduced (6));
-    correction.setBounds (top.reduced (6));
-
-    area.removeFromTop (8);
+    area.removeFromTop(8);
 
     const int columns = 4;
     const int rows = 2;
     const int cellW = area.getWidth() / columns;
-    const int cellH = area.getHeight() / rows;
+    const int cellH = juce::jmin(180, area.getHeight() / 2);
 
     struct Item { Knob* knob; juce::Label* label; };
     Item items[] = {
@@ -167,43 +195,44 @@ void JerzyAudioQuantizerAudioProcessorEditor::resized()
         { &threshold, &thresholdL },
         { &strength, &strengthL },
         { &window, &windowL },
-        { &lookahead, &lookaheadL },
-        { &smooth, &smoothL },
-        { &swing, &swingL },
-        { &preserve, &preserveL }
+        { &analysis, &analysisL },
+        { &preserve, &preserveL },
+        { &swing, &swingL }
     };
 
-    for (int idx = 0; idx < 8; ++idx)
+    for (int i = 0; i < 7; ++i)
     {
-        const int row = idx / columns;
-        const int col = idx % columns;
+        const int row = i / columns;
+        const int col = i % columns;
 
-        juce::Rectangle<int> cell (
+        juce::Rectangle<int> cell(
             area.getX() + col * cellW,
             area.getY() + row * cellH,
             cellW,
             cellH);
 
-        cell.reduce (10, 6);
-        items[idx].label->setBounds (cell.removeFromTop (24));
-        items[idx].knob->setBounds (cell);
+        cell.reduce(8, 4);
+        items[i].label->setBounds(cell.removeFromTop(30));
+        items[i].knob->setBounds(cell);
     }
+
+    auto bottom = getLocalBounds().reduced(28);
+    bottom.removeFromTop(160 + cellH * 2 + 8);
+    stats.setBounds(bottom.removeFromTop(28));
+    hint.setBounds(bottom.reduced(4));
 }
 
 void JerzyAudioQuantizerAudioProcessorEditor::timerCallback()
 {
-    const bool transient = processor.transientFlash.load (std::memory_order_relaxed) > 0;
-    const bool corrected = processor.correctionFlash.load (std::memory_order_relaxed) > 0;
+    const int detected = processor.detectedAttacks.load();
+    const int accepted = processor.acceptedAttacks.load();
+    const int rejected = processor.rejectedAttacks.load();
 
-    status.setText (transient ? "TRANSIENT" : "LISTENING", juce::dontSendNotification);
-
-    if (corrected)
-    {
-        const float ms = processor.lastCorrectionMs.load (std::memory_order_relaxed);
-        correction.setText (
-            (ms >= 0.0f ? "+" : "") + juce::String (ms, 1) + " ms",
-            juce::dontSendNotification);
-    }
+    stats.setText(
+        "Ataki wykryte: " + juce::String(detected)
+        + "   |   użyte do korekcji: " + juce::String(accepted)
+        + "   |   odrzucone jako niepewne / poza zakresem: " + juce::String(rejected),
+        juce::dontSendNotification);
 
     repaint();
 }
