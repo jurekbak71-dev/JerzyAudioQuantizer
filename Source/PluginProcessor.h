@@ -2,7 +2,7 @@
 #include <JuceHeader.h>
 #include "TransientDetector.h"
 #include "QuantizerEngine.h"
-#include "WSOLAQuantizeWarper.h"
+#include "StudioSegmentEngine.h"
 
 class JerzyAudioQuantizerAudioProcessor final : public juce::AudioProcessor
 {
@@ -10,55 +10,52 @@ public:
     JerzyAudioQuantizerAudioProcessor();
     ~JerzyAudioQuantizerAudioProcessor() override = default;
 
-    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
-    void releaseResources() override;
-    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
-
-    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override {}
+    bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-
     const juce::String getName() const override { return JucePlugin_Name; }
 
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-
-    double getTailLengthSeconds() const override { return 0.35; }
+    double getTailLengthSeconds() const override { return 2.0; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
-    void changeProgramName (int, const juce::String&) override {}
+    void setCurrentProgram(int) override {}
+    const juce::String getProgramName(int) override { return {}; }
+    void changeProgramName(int, const juce::String&) override {}
 
-    void getStateInformation (juce::MemoryBlock&) override;
-    void setStateInformation (const void*, int) override;
+    void getStateInformation(juce::MemoryBlock&) override;
+    void setStateInformation(const void*, int) override;
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts;
 
-    std::atomic<float> lastInputPeak { 0.0f };
-    std::atomic<float> lastOutputPeak { 0.0f };
+    std::atomic<float> attackConfidence { 0.0f };
+    std::atomic<float> lastCorrectionMs { 0.0f };
+    std::atomic<float> lastStretchRatio { 1.0f };
+    std::atomic<float> artifactRisk { 0.0f };
+    std::atomic<int> detectedAttacks { 0 };
+    std::atomic<int> acceptedAttacks { 0 };
+    std::atomic<int> rejectedAttacks { 0 };
     std::atomic<int> transientFlash { 0 };
     std::atomic<int> correctionFlash { 0 };
-    std::atomic<float> lastCorrectionMs { 0.0f };
 
 private:
-    void updateLatencyFromParameter();
+    void updateLatency();
 
-    TransientDetector transientDetector;
+    TransientDetector detector;
     QuantizerEngine quantizer;
-    WSOLAQuantizeWarper warper;
+    StudioSegmentEngine studioEngine;
 
-    double currentSampleRate = 44100.0;
-    int currentLatencySamples = 0;
-
+    double sampleRateHz = 44100.0;
+    std::int64_t absoluteSamples = 0;
     double fallbackPpq = 0.0;
-    double lastHostPpq = 0.0;
-    bool hadHostPpq = false;
-    bool wasEnabled = true;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JerzyAudioQuantizerAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyAudioQuantizerAudioProcessor)
 };
