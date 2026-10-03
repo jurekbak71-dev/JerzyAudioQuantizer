@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <cmath>
+#include <algorithm>
 
 class TransientDetector
 {
@@ -68,7 +69,7 @@ public:
         const float floorTarget = juce::jmin(weighted, slowEnv * 1.5f + 1.0e-6f);
         noiseFloor += noiseCoeff * (floorTarget - noiseFloor);
 
-        const float base = juce::jmax({ slowEnv, noiseFloor * 2.0f, 1.0e-6f });
+        const float base = std::max(std::max(slowEnv, noiseFloor * 2.0f), 1.0e-6f);
         const float novelty = juce::jmax(0.0f, (fastEnv - midEnv) / base);
         const float levelGate = juce::jmax(thresholdLinear, noiseFloor * 3.0f);
 
