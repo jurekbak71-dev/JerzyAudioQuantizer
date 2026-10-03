@@ -64,3 +64,8 @@ target_link_libraries(JerzyAudioQuantizer
         juce::juce_recommended_warning_flags
 )
 
+
+
+if (MSVC)
+    target_compile_options(JerzyAudioQuantizer PRIVATE /utf-8)
+endif()
