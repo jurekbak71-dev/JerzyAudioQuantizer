@@ -57,13 +57,10 @@ target_link_libraries(JerzyAudioQuantizer
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
+        signalsmith-stretch
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
 
-
-target_include_directories(JerzyAudioQuantizer PRIVATE
-    ${signalsmith_stretch_SOURCE_DIR}
-)
