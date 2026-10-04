@@ -14,7 +14,7 @@ FetchContent_MakeAvailable(JUCE)
 FetchContent_Declare(
     SIGNALSMITH_STRETCH
     GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
-    GIT_TAG 1.0.0
+    GIT_TAG a670068d9aeb64913331d5cc29337b19a457a7df
 )
 FetchContent_MakeAvailable(SIGNALSMITH_STRETCH)
 
