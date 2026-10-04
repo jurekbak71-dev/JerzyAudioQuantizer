@@ -1,58 +1,96 @@
-# JERZY AUDIO QUANTIZER v0.2
+# JERZY AUDIO QUANTIZER v0.3.2
 
-Real-time transient-based rhythmic audio quantizer for guitar and other attack-based audio.
+Studyjny VST3 do zdecydowanej korekcji rytmicznej już nagranych partii gitarowych.
 
-## DSP chain
+## Założenie
 
-1. HP-filtered transient detector with fast/slow envelope novelty measure.
-2. Host BPM + PPQ sync from JUCE AudioPlayHead.
-3. Musical grid quantizer.
-4. Strength/window/swing calculation.
-5. Lookahead ring buffer.
-6. WSOLA-inspired waveform-similarity search around the requested timing offset.
-7. Equal-power overlap-add splice between constant-speed read heads.
-8. Protected transient region.
+Wtyczka nie jest projektowana jako efekt live. Priorytetem jest możliwie czysta korekcja timingowa nagranej gitary bez echa, dubli ataku i glitchy.
 
-## Parameters
+Przetwarzanie odbywa się w trzech etapach:
 
-- QUANTIZE on/off
-- SENSITIVITY
-- THRESHOLD
-- GRID: 1/4, 1/8, 1/16, 1/32, 1/8T, 1/16T
-- STRENGTH 0-100%
-- WINDOW 2-120 ms
-- LOOKAHEAD 10-300 ms
-- SMOOTH
-- SWING
-- TRANSIENT PRESERVE 0-40 ms
-- QUALITY: LIVE / STUDIO
+1. inteligentna detekcja prawdziwych ataków,
+2. ocena pewności i wybór punktów rytmicznych,
+3. korekcja całych odcinków transient → transient przez pitch-preserving time-stretch.
 
-## LIVE vs STUDIO
+## Aktualny DSP
 
-LIVE uses a shorter waveform search and shorter comparison window to reduce CPU.
-STUDIO searches a wider region and uses a longer similarity window for cleaner splices.
+- adaptacyjny detektor transjentów,
+- filtr rumble/DC przed analizą,
+- analiza kilku pasm częstotliwości,
+- adaptacyjny noise floor,
+- confidence score dla każdego ataku,
+- odrzucanie słabych i podejrzanych transjentów,
+- synchronizacja BPM i PPQ z hostem,
+- siatki:
+  - AUTO,
+  - 1/4,
+  - 1/8,
+  - 1/16,
+  - 1/32,
+  - 1/8T,
+  - 1/16T,
+- automatyczny wybór siatki z histerezą,
+- segmentowy time-stretch oparty o Signalsmith Stretch,
+- ochrona początku dźwięku,
+- ograniczenie ekstremalnych współczynników stretch,
+- raportowanie latencji do hosta.
 
-## Why this does not change pitch
+## Parametry
 
-The engine does not continuously accelerate/decelerate the guitar signal. Instead, it changes
-where the buffered audio is read and chooses the splice point by waveform similarity. Both
-read heads run at normal 1x speed. The transition is overlap-added with equal-power gains.
+### WŁĄCZ KOREKCJĘ RYTMU
+Włącza lub wyłącza przetwarzanie.
 
-This is especially appropriate for small/medium guitar timing corrections. It avoids the
-continuous pitch modulation that a simple variable-delay approach would create.
+### SIATKA RYTMU
+AUTO analizuje odstępy między pewnymi atakami i dobiera najbardziej prawdopodobny podział rytmiczny.
 
-## Transient Preserve
+### CZUŁOŚĆ ATAKU KOSTKI
+Określa, jak łatwo detektor uzna zmianę sygnału za prawdziwy atak gitarowy.
 
-The splice is completed before the protected attack region reaches the output. The attack
-itself is therefore not used as the overlap zone, which helps retain pick definition.
+### PRÓG SZUMU I PRZECIEKÓW
+Pomaga ignorować szum, przesuwanie palców, przydźwięk i ciche artefakty pomiędzy nutami.
 
-## Build on Windows
+### SIŁA KOREKCJI RYTMU
+Określa, jak daleko wykryty atak zostanie przesunięty w stronę siatki.
 
-Requirements:
-- Visual Studio 2022 with Desktop development with C++
+### MAKSYMALNY BŁĄD CZASU
+Określa, jak duże rozjechanie rytmiczne wtyczka może jeszcze uznać za nutę przeznaczoną do naprawy.
+
+### DŁUGOŚĆ ANALIZY AUDIO
+Określa, ile materiału wtyczka analizuje z wyprzedzeniem. Większa wartość oznacza większą latencję, ale stabilniejszą decyzję studyjną.
+
+### OCHRONA ATAKU DŹWIĘKU
+Początkowy fragment każdej zaakceptowanej nuty jest kopiowany 1:1 bez time-stretchu. Korekcja długości jest przenoszona na dalszą część segmentu, dzięki czemu atak kostki pozostaje wyraźny.
+
+### SWING RYTMU
+Przesuwa co drugi krok siatki w stronę shuffle/swing.
+
+## Wskaźniki
+
+- PEWNOŚĆ: PRAWDZIWY ATAK
+- OSTATNIA KOREKTA
+- RYZYKO ARTEFAKTÓW
+- aktualny stretch ratio
+- licznik wykrytych / zaakceptowanych / odrzuconych ataków
+
+## Zalecane ustawienia startowe
+
+Mocno nierówna gitara rytmiczna:
+
+- Siatka: AUTO
+- Czułość ataku: 0.60–0.70
+- Próg szumu: około -48 dB
+- Siła korekcji: 85–95%
+- Maksymalny błąd czasu: 70–100 ms
+- Długość analizy: 700–1000 ms
+- Ochrona ataku: 15–25 ms
+- Swing: 0%
+
+## Build Windows
+
+Wymagania:
+- Visual Studio 2022 z Desktop development with C++
 - CMake 3.22+
 - Git
-- Internet access during first configure (JUCE is fetched by CMake)
 
 PowerShell:
 
@@ -60,49 +98,30 @@ PowerShell:
 .\build_windows.ps1
 ```
 
-or manually:
+lub:
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
-Expected output:
+Gotowy bundle:
 
 ```text
 build\JerzyAudioQuantizer_artefacts\Release\VST3\JERZY AUDIO QUANTIZER.vst3
 ```
 
-Copy to:
+Instalacja:
 
 ```text
 C:\Program Files\Common Files\VST3\
 ```
 
-then rescan plugins in FL Studio.
+## Zależności
 
-## Guitar starting settings
+- JUCE 9.0.3
+- Signalsmith Stretch — przypięty do konkretnego commitu upstream dla powtarzalnych buildów
 
-Rhythm guitar:
-- Grid: 1/16
-- Sensitivity: 0.65-0.75
-- Threshold: -45 to -35 dB
-- Strength: 70-90%
-- Window: 35-55 ms
-- Lookahead: 80-120 ms
-- Smooth: 6-10 ms
-- Transient Preserve: 15-25 ms
-- Quality: STUDIO
+## Aktualne ograniczenia
 
-Tighter palm-muted playing:
-- Window: 20-35 ms
-- Preserve: 8-15 ms
-- Strength: 80-100%
-
-## Current limitation
-
-v0.2 is a real-time similarity-aligned time-domain splice engine. It is substantially safer
-for pitch than the v0.1 variable-delay transition, but it is not an offline multisegment
-elastique-style stretcher. Very large corrections or dense polyphonic sustained material can
-still produce audible repetition/omission artifacts. The intended range is timing repair of
-individual guitar attacks with moderate offsets.
+To nadal wersja rozwojowa. Bardzo duże korekcje oraz materiał o słabo zdefiniowanych atakach mogą wymagać zmniejszenia siły korekcji lub maksymalnego błędu czasu. Wskaźnik ryzyka artefaktów służy właśnie do szybkiego rozpoznawania takich sytuacji.
