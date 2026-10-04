@@ -108,8 +108,10 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
     const int gridIndex = static_cast<int>(apvts.getRawParameterValue(Param::grid)->load());
     const float strength = apvts.getRawParameterValue(Param::strength)->load() * 0.01f;
     const float windowMs = apvts.getRawParameterValue(Param::window)->load();
+    const float preserveMs = apvts.getRawParameterValue(Param::preserve)->load();
     const float swing = apvts.getRawParameterValue(Param::swing)->load() * 0.01f;
 
+    studioEngine.setTransientPreserveMs(preserveMs);
     detector.setSensitivity(sensitivity);
     detector.setThresholdDb(threshold);
 
