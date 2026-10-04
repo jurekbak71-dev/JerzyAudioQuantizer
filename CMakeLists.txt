@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(JerzyAudioQuantizer VERSION 0.1.0)
+project(JerzyAudioQuantizer VERSION 0.3.2)
 
 include(FetchContent)
 
@@ -14,7 +14,7 @@ FetchContent_MakeAvailable(JUCE)
 FetchContent_Declare(
     SIGNALSMITH_STRETCH
     GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
-    GIT_TAG main
+    GIT_TAG a670068d9aeb64913331d5cc29337b19a457a7df
 )
 FetchContent_MakeAvailable(SIGNALSMITH_STRETCH)
 

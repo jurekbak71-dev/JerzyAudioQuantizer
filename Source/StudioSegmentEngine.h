@@ -53,6 +53,12 @@ public:
         analysisSamples = static_cast<int>(sampleRate * 0.001 * juce::jlimit(150.0f, 1800.0f, ms));
     }
 
+    void setTransientPreserveMs(float ms)
+    {
+        transientPreserveSamples = static_cast<int>(
+            sampleRate * 0.001 * juce::jlimit(0.0f, 45.0f, ms));
+    }
+
     int getLatencySamples() const
     {
         return analysisSamples + stretch.inputLatency() + stretch.outputLatency();
@@ -174,9 +180,29 @@ private:
         if (outLen > tempOut.getNumSamples())
             return;
 
+        // Protect the beginning of each detected note. The protected attack is copied
+        // 1:1 and only the remainder of the transient-to-transient segment is stretched.
+        // This keeps pick definition intact and moves the timing correction into sustain.
+        const int protect = juce::jlimit(0,
+                                        juce::jmin(inLen - 1, outLen - 1),
+                                        transientPreserveSamples);
+
+        for (int i = 0; i < protect; ++i)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+                writeOutputSample(ch, readInput(ch, inStart + i));
+            advanceOutputWrite();
+        }
+
+        const int stretchInLen = inLen - protect;
+        const int stretchOutLen = outLen - protect;
+
+        if (stretchInLen <= 0 || stretchOutLen <= 0)
+            return;
+
         for (int ch = 0; ch < numChannels; ++ch)
-            for (int i = 0; i < inLen; ++i)
-                tempIn.setSample(ch, i, readInput(ch, inStart + i));
+            for (int i = 0; i < stretchInLen; ++i)
+                tempIn.setSample(ch, i, readInput(ch, inStart + protect + i));
 
         std::vector<const float*> inPtrs(static_cast<size_t>(numChannels));
         std::vector<float*> outPtrs(static_cast<size_t>(numChannels));
@@ -186,16 +212,12 @@ private:
             outPtrs[(size_t)ch] = tempOut.getWritePointer(ch);
         }
 
-        stretch.process(inPtrs.data(), inLen, outPtrs.data(), outLen);
+        stretch.process(inPtrs.data(), stretchInLen, outPtrs.data(), stretchOutLen);
 
-        // One continuous stretcher state is used across all segments.
-        // Do not add an extra splice/crossfade here: that can smear pick attacks
-        // or create audible repetitions at segment boundaries.
-        for (int i = 0; i < outLen; ++i)
+        for (int i = 0; i < stretchOutLen; ++i)
         {
             for (int ch = 0; ch < numChannels; ++ch)
                 writeOutputSample(ch, tempOut.getSample(ch, i));
-
             advanceOutputWrite();
         }
     }
@@ -204,6 +226,7 @@ private:
     int numChannels = 2;
     int maxBlock = 512;
     int analysisSamples = 22050;
+    int transientPreserveSamples = 794;
 
     juce::AudioBuffer<float> inputRing, outputRing, tempIn, tempOut;
     int inputWrite = 0, outputWrite = 0, outputRead = 0;
