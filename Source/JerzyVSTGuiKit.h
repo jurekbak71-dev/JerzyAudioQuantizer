@@ -7,6 +7,11 @@ struct Theme {
     juce::Colour chassisTop, chassisBottom;
     juce::Colour panelTop, panelBottom;
     juce::Colour accent, text, muted, edge, ledOn, display;
+    Theme(juce::uint32 a,juce::uint32 b,juce::uint32 c,juce::uint32 d,
+          juce::uint32 e,juce::uint32 f,juce::uint32 g,juce::uint32 h,
+          juce::uint32 i,juce::uint32 j)
+      : chassisTop(a),chassisBottom(b),panelTop(c),panelBottom(d),
+        accent(e),text(f),muted(g),edge(h),ledOn(i),display(j) {}
 };
 
 inline Theme petrol()   { return {0xff124b49,0xff071c1d,0xff102f2f,0xff071819,0xfff1a649,0xffefe2c4,0xff8aa29b,0xff708475,0xff44dc60,0xfff1a649}; }
