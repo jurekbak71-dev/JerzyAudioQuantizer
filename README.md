@@ -1,127 +1,134 @@
-# JERZY AUDIO QUANTIZER v0.3.2
+# JERZY AUDIO QUANTIZER 2
 
 Studyjny VST3 do zdecydowanej korekcji rytmicznej już nagranych partii gitarowych.
 
-## Założenie
+## Cel wersji 2
 
-Wtyczka nie jest projektowana jako efekt live. Priorytetem jest możliwie czysta korekcja timingowa nagranej gitary bez echa, dubli ataku i glitchy.
+Wtyczka jest projektowana jako pomoc dla gitarzysty, który gra nierówno względem tempa lub wybranego podziału rytmicznego. Priorytetem jest poprawa timingowa bez dubli ataku, echa, przypadkowych glitchy i słyszalnego "gumowania" dźwięku. Drugim zadaniem jest lekkie wyrównanie zbyt dużych różnic dynamiki pomiędzy uderzeniami.
 
-Przetwarzanie odbywa się w trzech etapach:
+To nie jest efekt live. Wersja 2 świadomie używa większego, stałego opóźnienia studyjnego, aby mieć czas na analizę materiału i nie zmieniać PDC hosta w trakcie odtwarzania.
 
-1. inteligentna detekcja prawdziwych ataków,
-2. ocena pewności i wybór punktów rytmicznych,
-3. korekcja całych odcinków transient → transient przez pitch-preserving time-stretch.
+## Najważniejsze zmiany względem 0.3.2
 
-## Aktualny DSP
+- nowa nazwa produktu: **JERZY AUDIO QUANTIZER 2**,
+- nowy bundle ID i VST3 plug-in code, więc stara i nowa wersja mogą istnieć obok siebie,
+- stała latencja raportowana hostowi; brak `setLatencySamples()` w `processBlock()`,
+- znacznie mniejsze bufory audio,
+- brak krótkotrwałych alokacji `std::vector` w torze audio,
+- współczynniki filtrów detektora są liczone raz w `prepare()`, a nie przez `exp()` dla każdej próbki,
+- ulepszony detektor ataków gitary: poziom + szybka zmiana energii + przewaga pasma ataku + adaptacyjny noise floor,
+- bardziej stabilne AUTO: decyzja korzysta z historii ostatnich odstępów między pewnymi uderzeniami,
+- dodatkowe rytmy: shuffle 1/8 i shuffle 1/16,
+- pełny segment zawsze przechodzi przez Signalsmith Stretch, dzięki czemu historia/phase state nie jest przerywana,
+- początek nuty jest chroniony przez equal-power crossfade między oryginalnym atakiem a już przetworzonym segmentem,
+- automatyczne ograniczanie niebezpiecznych współczynników stretch zamiast wymuszania korekcji za wszelką cenę,
+- lekkie wyrównanie dynamiki po korekcji czasu,
+- przebudowane GUI z polskimi opisami mówiącymi wprost, co robi każda kontrolka.
 
-- adaptacyjny detektor transjentów,
-- filtr rumble/DC przed analizą,
-- analiza kilku pasm częstotliwości,
-- adaptacyjny noise floor,
-- confidence score dla każdego ataku,
-- odrzucanie słabych i podejrzanych transjentów,
-- synchronizacja BPM i PPQ z hostem,
-- siatki:
-  - AUTO,
-  - 1/4,
-  - 1/8,
-  - 1/16,
-  - 1/32,
-  - 1/8T,
-  - 1/16T,
-- automatyczny wybór siatki z histerezą,
-- segmentowy time-stretch oparty o Signalsmith Stretch,
-- ochrona początku dźwięku,
-- ograniczenie ekstremalnych współczynników stretch,
-- raportowanie latencji do hosta.
+## Synchronizacja z FL Studio / hostem
 
-## Parametry
+Wtyczka pobiera z hosta:
+- BPM,
+- pozycję PPQ na początku bloku.
 
-### WŁĄCZ KOREKCJĘ RYTMU
-Włącza lub wyłącza przetwarzanie.
+Na tej podstawie każdy pewny atak jest porównywany z wybraną siatką. Jeżeli host nie poda PPQ, wtyczka utrzymuje własną ciągłość PPQ jako tryb awaryjny.
 
-### SIATKA RYTMU
-AUTO analizuje odstępy między pewnymi atakami i dobiera najbardziej prawdopodobny podział rytmiczny.
+Dostępne rytmy:
+- AUTO — rozpoznaj z nagrania,
+- ćwierćnuty 1/4,
+- ósemki 1/8,
+- szesnastki 1/16,
+- trzydziestodwójki 1/32,
+- triole ósemkowe 1/8T,
+- triole szesnastkowe 1/16T,
+- shuffle ósemkowy,
+- shuffle szesnastkowy.
 
-### CZUŁOŚĆ ATAKU KOSTKI
-Określa, jak łatwo detektor uzna zmianę sygnału za prawdziwy atak gitarowy.
+## Jak działa korekcja
 
-### PRÓG SZUMU I PRZECIEKÓW
-Pomaga ignorować szum, przesuwanie palców, przydźwięk i ciche artefakty pomiędzy nutami.
+1. Detektor szuka prawdziwego początku uderzenia kostki i nadaje mu confidence.
+2. Quantizer wybiera najbliższy sensowny punkt rytmiczny.
+3. Dwa kolejne zaakceptowane ataki tworzą odcinek podobny do pracy markerów warpu.
+4. Odcinek jest rozciągany/skracany przez Signalsmith Stretch z zachowaniem wysokości.
+5. Cały odcinek przechodzi przez stretcher; jego stanu nie przerywa już kopiowany "na skróty" fragment.
+6. Początek nuty jest na wyjściu zastępowany naturalnym atakiem i płynnie crossfadowany do przetworzonego sustainu.
+7. Zbyt agresywna korekcja jest automatycznie ograniczana do bezpieczniejszego ratio.
+8. Opcjonalny leveler łagodnie uspokaja zbyt mocne uderzenia.
 
-### SIŁA KOREKCJI RYTMU
-Określa, jak daleko wykryty atak zostanie przesunięty w stronę siatki.
+## Parametry GUI
 
-### MAKSYMALNY BŁĄD CZASU
-Określa, jak duże rozjechanie rytmiczne wtyczka może jeszcze uznać za nutę przeznaczoną do naprawy.
+### JAK ŁATWO ROZPOZNAJE UDERZENIE KOSTKI
+Więcej = wykrywa delikatniejsze ataki. Zmniejsz, jeśli jako ataki traktowane są szuranie palców lub sustain.
 
-### DŁUGOŚĆ ANALIZY AUDIO
-Określa, ile materiału wtyczka analizuje z wyprzedzeniem. Większa wartość oznacza większą latencję, ale stabilniejszą decyzję studyjną.
+### PONIŻEJ JAKIEGO POZIOMU IGNORUJE DŹWIĘK
+Pomaga odrzucać szum, brum i ciche przecieki.
 
-### OCHRONA ATAKU DŹWIĘKU
-Początkowy fragment każdej zaakceptowanej nuty jest kopiowany 1:1 bez time-stretchu. Korekcja długości jest przenoszona na dalszą część segmentu, dzięki czemu atak kostki pozostaje wyraźny.
+### DO JAKIEGO RYTMU MA WYRÓWNYWAĆ
+AUTO analizuje historię pewnych uderzeń albo można narzucić konkretny podział.
 
-### SWING RYTMU
-Przesuwa co drugi krok siatki w stronę shuffle/swing.
+### JAK MOCNO DOCIĄGA GRĘ DO RYTMU
+Określa procent przesunięcia wykrytego uderzenia w stronę siatki.
+
+### JAK DUŻY BŁĄD RYTMU JESZCZE NAPRAWIA
+Ogranicza maksymalną odległość od siatki, którą wtyczka ma jeszcze uznać za błąd do naprawy.
+
+### ILE NAGRANIA SPRAWDZA PRZED DECYZJĄ
+Steruje zakresem materiału branym pod uwagę przed wypuszczeniem bezpiecznego audio. Latencja raportowana hostowi pozostaje stała.
+
+### JAK MOCNO CHRONI POCZĄTEK NUTY
+Określa długość oryginalnego ataku zachowanego przed płynnym wejściem w time-stretch.
+
+### ILE SWINGU DODAJE DO PROSTEJ SIATKI
+Przesuwa co drugi punkt prostej siatki. Tryby Shuffle mają własny stały układ.
+
+### JAK MOCNO WYRÓWNUJE GŁOŚNOŚĆ UDERZEŃ
+Włącza łagodne wyrównanie zbyt mocnych uderzeń po korekcji czasu.
 
 ## Wskaźniki
 
-- PEWNOŚĆ: PRAWDZIWY ATAK
-- OSTATNIA KOREKTA
-- RYZYKO ARTEFAKTÓW
-- aktualny stretch ratio
-- licznik wykrytych / zaakceptowanych / odrzuconych ataków
+- **CZY TO PRAWDZIWY ATAK** — confidence detektora,
+- **OSTATNIA POPRAWKA** — przesunięcie w ms,
+- **RYZYKO ARTEFAKTÓW** — wynikające głównie z aktualnego stretch ratio,
+- **WYRÓWNANIE DYNAMIKI** — bieżąca redukcja poziomu i BPM hosta,
+- liczniki wykrytych / użytych / odrzuconych ataków.
 
-## Zalecane ustawienia startowe
+## Zalecany punkt startowy dla nierównej gitary rytmicznej
 
-Mocno nierówna gitara rytmiczna:
+- rytm: AUTO albo wymuszony 1/16,
+- rozpoznawanie ataku: około 0.60–0.70,
+- ignorowanie szumu: około -48 dB,
+- siła poprawy: 80–92%,
+- maksymalny błąd: 60–100 ms,
+- analiza: 700–1000 ms,
+- ochrona początku nuty: 15–25 ms,
+- swing: 0% jeśli nie jest celowo potrzebny,
+- wyrównanie dynamiki: 15–35%.
 
-- Siatka: AUTO
-- Czułość ataku: 0.60–0.70
-- Próg szumu: około -48 dB
-- Siła korekcji: 85–95%
-- Maksymalny błąd czasu: 70–100 ms
-- Długość analizy: 700–1000 ms
-- Ochrona ataku: 15–25 ms
-- Swing: 0%
+## Optymalizacja
+
+Największe zmiany CPU/RAM w wersji 2:
+- usunięcie funkcji wykładniczych z pętli per-sample detektora,
+- brak heap allocation w `StudioSegmentEngine::processSegment()`,
+- bufory dopasowane do realnego maksymalnego okna studyjnego zamiast 8/12/4/6 sekund,
+- 20 Hz odświeżanie GUI zamiast 30 Hz,
+- brak ciągłego rekonfigurowania latencji hosta,
+- przetwarzanie stereo maksymalnie dla dwóch kanałów.
+
+Jakość stretchera pozostaje w trybie `presetDefault`; optymalizacja nie przełącza go na niższą jakość.
 
 ## Build Windows
-
-Wymagania:
-- Visual Studio 2022 z Desktop development with C++
-- CMake 3.22+
-- Git
-
-PowerShell:
 
 ```powershell
 .\build_windows.ps1
 ```
 
-lub:
-
-```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
-```
-
-Gotowy bundle:
+Oczekiwany bundle:
 
 ```text
-build\JerzyAudioQuantizer_artefacts\Release\VST3\JERZY AUDIO QUANTIZER.vst3
-```
-
-Instalacja:
-
-```text
-C:\Program Files\Common Files\VST3\
+build\JerzyAudioQuantizer2_artefacts\Release\VST3\JERZY AUDIO QUANTIZER 2.vst3
 ```
 
 ## Zależności
 
 - JUCE 9.0.3
-- Signalsmith Stretch — przypięty do konkretnego commitu upstream dla powtarzalnych buildów
-
-## Aktualne ograniczenia
-
-To nadal wersja rozwojowa. Bardzo duże korekcje oraz materiał o słabo zdefiniowanych atakach mogą wymagać zmniejszenia siły korekcji lub maksymalnego błędu czasu. Wskaźnik ryzyka artefaktów służy właśnie do szybkiego rozpoznawania takich sytuacji.
+- Signalsmith Stretch — przypięty do commitu `a670068d9aeb64913331d5cc29337b19a457a7df`
