@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "JerzyVSTGuiKit.h"
 
 class JerzyAudioQuantizerAudioProcessorEditor final
     : public juce::AudioProcessorEditor,
@@ -8,7 +9,7 @@ class JerzyAudioQuantizerAudioProcessorEditor final
 {
 public:
     explicit JerzyAudioQuantizerAudioProcessorEditor(JerzyAudioQuantizerAudioProcessor&);
-    ~JerzyAudioQuantizerAudioProcessorEditor() override = default;
+    ~JerzyAudioQuantizerAudioProcessorEditor() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -38,6 +39,7 @@ private:
     void layoutCell(juce::Rectangle<int>, Knob&, ControlText&);
 
     JerzyAudioQuantizerAudioProcessor& processor;
+    JerzyAudioUI::HardwareLookAndFeel look { JerzyAudioUI::violet() };
 
     juce::ToggleButton enabled { "WŁĄCZ POPRAWĘ RYTMU" };
     juce::ComboBox grid;
