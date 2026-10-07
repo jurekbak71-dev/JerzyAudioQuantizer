@@ -18,6 +18,7 @@ JerzyAudioQuantizerAudioProcessorEditor::JerzyAudioQuantizerAudioProcessorEditor
     JerzyAudioQuantizerAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
+    setLookAndFeel(&look);
     setResizable(true, true);
     setResizeLimits(1020, 720, 1720, 1120);
     setSize(1360, 920);
@@ -173,18 +174,12 @@ void JerzyAudioQuantizerAudioProcessorEditor::drawMeter(
 
 void JerzyAudioQuantizerAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff090b0d));
     const auto b = getLocalBounds().toFloat();
+    const auto theme = JerzyAudioUI::violet();
+    JerzyAudioUI::paintChassis(g, b, theme);
+    JerzyAudioUI::paintPanel(g, b.reduced(16.0f).withTrimmedTop(72.0f), theme, 10.0f);
 
-    juce::ColourGradient grad(juce::Colour(0xff24292e), b.getTopLeft(),
-                              juce::Colour(0xff0b0d0f), b.getBottomRight(), false);
-    g.setGradientFill(grad);
-    g.fillRoundedRectangle(b.reduced(8.0f), 15.0f);
-
-    g.setColour(juce::Colour(0xff555d64));
-    g.drawRoundedRectangle(b.reduced(9.0f), 15.0f, 1.0f);
-
-    g.setColour(juce::Colours::white);
+    g.setColour(theme.text);
     g.setFont(juce::FontOptions(30.0f, juce::Font::bold));
     g.drawText("JERZY AUDIO QUANTIZER 2", 24, 16, getWidth() - 48, 42,
                juce::Justification::centred);
