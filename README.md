@@ -132,3 +132,6 @@ build\JerzyAudioQuantizer2_artefacts\Release\VST3\JERZY AUDIO QUANTIZER 2.vst3
 
 - JUCE 9.0.3
 - Signalsmith Stretch — przypięty do commitu `a670068d9aeb64913331d5cc29337b19a457a7df`
+
+
+<!-- Jerzy VST GUI System CI validation -->
