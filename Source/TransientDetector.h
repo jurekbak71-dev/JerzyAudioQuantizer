@@ -26,6 +26,9 @@ public:
         // These used to be recomputed with exp() for every audio sample.
         lowCoeffValue = onePoleCoeff(170.0f);
         midBandCoeffValue = onePoleCoeff(2400.0f);
+        const float rc = 1.0f / (juce::MathConstants<float>::twoPi * 70.0f);
+        const float dt = 1.0f / static_cast<float>(sampleRate);
+        hpCoeffValue = rc / (rc + dt);
 
         minIntervalSamples = static_cast<int>(0.032 * sampleRate);
         reset();
@@ -49,11 +52,7 @@ public:
         Result r;
 
         // 70 Hz high-pass: removes handling rumble/DC before onset analysis.
-        constexpr float hpHz = 70.0f;
-        const float rc = 1.0f / (juce::MathConstants<float>::twoPi * hpHz);
-        const float dt = 1.0f / static_cast<float>(sampleRate);
-        const float a = rc / (rc + dt);
-        const float hp = a * (hpY1 + x - hpX1);
+        const float hp = hpCoeffValue * (hpY1 + x - hpX1);
         hpX1 = x;
         hpY1 = hp;
 
@@ -146,7 +145,7 @@ private:
     float previousFast = 0.0f, peakNovelty = 0.0f;
 
     float fastCoeff = 0.0f, midCoeff = 0.0f, slowCoeff = 0.0f, noiseCoeff = 0.0f;
-    float lowCoeffValue = 0.0f, midBandCoeffValue = 0.0f;
+    float lowCoeffValue = 0.0f, midBandCoeffValue = 0.0f, hpCoeffValue = 0.0f;
 
     int refractory = 0;
     int minIntervalSamples = 1400;
