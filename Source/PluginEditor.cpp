@@ -119,7 +119,7 @@ JerzyAudioQuantizerAudioProcessorEditor::JerzyAudioQuantizerAudioProcessorEditor
     startTimerHz(20);
 }
 
-void JerzyAudioQuantizerAudioProcessorEditor::addKnob(
+JerzyAudioQuantizerAudioProcessorEditor::~JerzyAudioQuantizerAudioProcessorEditor()\n{\n    setLookAndFeel(nullptr);\n}\n\nvoid JerzyAudioQuantizerAudioProcessorEditor::addKnob(
     Knob& knob, ControlText& text, const juce::String& title, const juce::String& help)
 {
     addAndMakeVisible(knob);
