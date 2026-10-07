@@ -21,24 +21,33 @@ private:
         Knob()
         {
             setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-            setTextBoxStyle(juce::Slider::TextBoxBelow, false, 92, 22);
+            setTextBoxStyle(juce::Slider::TextBoxBelow, false, 104, 24);
+            setDoubleClickReturnValue(true, 0.0);
         }
     };
 
-    void addKnob(Knob&, juce::Label&, const juce::String&);
-    void drawMeter(juce::Graphics&, juce::Rectangle<float>, float value, const juce::String& title,
-                   const juce::String& valueText) const;
+    struct ControlText
+    {
+        juce::Label title;
+        juce::Label help;
+    };
+
+    void addKnob(Knob&, ControlText&, const juce::String& title, const juce::String& help);
+    void drawMeter(juce::Graphics&, juce::Rectangle<float>, float value,
+                   const juce::String& title, const juce::String& valueText) const;
+    void layoutCell(juce::Rectangle<int>, Knob&, ControlText&);
 
     JerzyAudioQuantizerAudioProcessor& processor;
 
-    juce::ToggleButton enabled { "WŁĄCZ KOREKCJĘ RYTMU" };
+    juce::ToggleButton enabled { "WŁĄCZ POPRAWĘ RYTMU" };
     juce::ComboBox grid;
-    juce::Label gridL;
+    juce::Label gridTitle, gridHelp;
 
-    Knob sensitivity, threshold, strength, window, analysis, preserve, swing;
-    juce::Label sensitivityL, thresholdL, strengthL, windowL, analysisL, preserveL, swingL;
+    Knob sensitivity, threshold, strength, window, analysis, preserve, swing, dynamics;
+    ControlText sensitivityText, thresholdText, strengthText, windowText;
+    ControlText analysisText, preserveText, swingText, dynamicsText;
 
-    juce::Label hint;
+    juce::Label setupHint;
     juce::Label stats;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -48,7 +57,7 @@ private:
     std::unique_ptr<ButtonAttachment> enabledA;
     std::unique_ptr<ComboAttachment> gridA;
     std::unique_ptr<SliderAttachment> sensitivityA, thresholdA, strengthA, windowA;
-    std::unique_ptr<SliderAttachment> analysisA, preserveA, swingA;
+    std::unique_ptr<SliderAttachment> analysisA, preserveA, swingA, dynamicsA;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyAudioQuantizerAudioProcessorEditor)
 };

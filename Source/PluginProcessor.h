@@ -3,6 +3,7 @@
 #include "TransientDetector.h"
 #include "QuantizerEngine.h"
 #include "StudioSegmentEngine.h"
+#include "DynamicsLeveler.h"
 
 class JerzyAudioQuantizerAudioProcessor final : public juce::AudioProcessor
 {
@@ -22,7 +23,7 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 2.0; }
+    double getTailLengthSeconds() const override { return 0.0; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -40,22 +41,24 @@ public:
     std::atomic<float> lastCorrectionMs { 0.0f };
     std::atomic<float> lastStretchRatio { 1.0f };
     std::atomic<float> artifactRisk { 0.0f };
+    std::atomic<float> dynamicsReductionDb { 0.0f };
+    std::atomic<float> currentBpm { 120.0f };
     std::atomic<int> detectedAttacks { 0 };
     std::atomic<int> acceptedAttacks { 0 };
     std::atomic<int> rejectedAttacks { 0 };
-    std::atomic<int> transientFlash { 0 };
-    std::atomic<int> correctionFlash { 0 };
 
 private:
-    void updateLatency();
-
     TransientDetector detector;
     QuantizerEngine quantizer;
     StudioSegmentEngine studioEngine;
+    DynamicsLeveler dynamics;
 
     double sampleRateHz = 44100.0;
     std::int64_t absoluteSamples = 0;
     double fallbackPpq = 0.0;
+    std::int64_t lastHostSamplePosition = -1;
+    int previousBlockSize = 0;
+    bool wasPlaying = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyAudioQuantizerAudioProcessor)
 };
