@@ -135,3 +135,5 @@ build\JerzyAudioQuantizer2_artefacts\Release\VST3\JERZY AUDIO QUANTIZER 2.vst3
 
 
 <!-- Jerzy VST GUI System CI validation -->
+
+<!-- Jerzy GUI validation pass 2 -->
