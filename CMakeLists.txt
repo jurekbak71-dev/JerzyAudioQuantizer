@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(JerzyAudioQuantizer VERSION 0.3.2)
+project(JerzyAudioQuantizer2 VERSION 1.0.0)
 
 include(FetchContent)
 
@@ -18,13 +18,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SIGNALSMITH_STRETCH)
 
-juce_add_plugin(JerzyAudioQuantizer
+juce_add_plugin(JerzyAudioQuantizer2
     COMPANY_NAME "Jerzy"
-    BUNDLE_ID "pl.jerzy.audioquantizer"
+    BUNDLE_ID "pl.jerzy.audioquantizer2"
     PLUGIN_MANUFACTURER_CODE Jrzy
-    PLUGIN_CODE JaQz
+    PLUGIN_CODE JaQ2
     FORMATS VST3 Standalone
-    PRODUCT_NAME "JERZY AUDIO QUANTIZER"
+    PRODUCT_NAME "JERZY AUDIO QUANTIZER 2"
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
     IS_SYNTH FALSE
@@ -32,9 +32,9 @@ juce_add_plugin(JerzyAudioQuantizer
     COPY_PLUGIN_AFTER_BUILD FALSE
 )
 
-juce_generate_juce_header(JerzyAudioQuantizer)
+juce_generate_juce_header(JerzyAudioQuantizer2)
 
-target_sources(JerzyAudioQuantizer PRIVATE
+target_sources(JerzyAudioQuantizer2 PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
     Source/PluginEditor.cpp
@@ -42,18 +42,19 @@ target_sources(JerzyAudioQuantizer PRIVATE
     Source/TransientDetector.h
     Source/QuantizerEngine.h
     Source/StudioSegmentEngine.h
+    Source/DynamicsLeveler.h
 )
 
-target_compile_features(JerzyAudioQuantizer PRIVATE cxx_std_20)
+target_compile_features(JerzyAudioQuantizer2 PRIVATE cxx_std_20)
 
-target_compile_definitions(JerzyAudioQuantizer
+target_compile_definitions(JerzyAudioQuantizer2
     PUBLIC
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
 )
 
-target_link_libraries(JerzyAudioQuantizer
+target_link_libraries(JerzyAudioQuantizer2
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
@@ -64,8 +65,6 @@ target_link_libraries(JerzyAudioQuantizer
         juce::juce_recommended_warning_flags
 )
 
-
-
 if (MSVC)
-    target_compile_options(JerzyAudioQuantizer PRIVATE /utf-8)
+    target_compile_options(JerzyAudioQuantizer2 PRIVATE /utf-8)
 endif()
