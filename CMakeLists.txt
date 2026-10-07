@@ -39,6 +39,7 @@ target_sources(JerzyAudioQuantizer2 PRIVATE
     Source/PluginProcessor.h
     Source/PluginEditor.cpp
     Source/PluginEditor.h
+    Source/JerzyVSTGuiKit.h
     Source/TransientDetector.h
     Source/QuantizerEngine.h
     Source/StudioSegmentEngine.h
