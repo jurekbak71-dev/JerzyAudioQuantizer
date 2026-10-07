@@ -10,6 +10,8 @@ public:
         sampleRate = juce::jmax(1.0, sr);
         envelope = 0.0f;
         gain = 1.0f;
+        desiredGain = 1.0f;
+        controlCounter = 0;
         attackCoeff = coeff(8.0);
         releaseCoeff = coeff(140.0);
     }
@@ -18,6 +20,8 @@ public:
     {
         envelope = 0.0f;
         gain = 1.0f;
+        desiredGain = 1.0f;
+        controlCounter = 0;
         gainReductionDb = 0.0f;
     }
 
@@ -50,13 +54,18 @@ public:
             const float envCoeff = detector > envelope ? attackCoeff : releaseCoeff;
             envelope += envCoeff * (detector - envelope);
 
-            float desired = 1.0f;
-            if (envelope > threshold)
-                desired = std::pow(envelope / threshold, exponent);
+            if (--controlCounter <= 0)
+            {
+                desiredGain = 1.0f;
+                if (envelope > threshold)
+                    desiredGain = std::pow(envelope / threshold, exponent);
+                controlCounter = 8;
+            }
 
-            // Smooth gain itself to avoid zipper noise around pick transients.
-            const float gainCoeff = desired < gain ? attackCoeff : releaseCoeff;
-            gain += gainCoeff * (desired - gain);
+            // Smooth gain itself every sample; the costly control-law update runs
+            // only every eight samples, which is inaudible but cheaper.
+            const float gainCoeff = desiredGain < gain ? attackCoeff : releaseCoeff;
+            gain += gainCoeff * (desiredGain - gain);
 
             const float g = gain * makeup;
             for (int ch = 0; ch < channels; ++ch)
@@ -78,6 +87,8 @@ private:
     float amount = 0.0f;
     float envelope = 0.0f;
     float gain = 1.0f;
+    float desiredGain = 1.0f;
+    int controlCounter = 0;
     float attackCoeff = 0.0f;
     float releaseCoeff = 0.0f;
     float gainReductionDb = 0.0f;
