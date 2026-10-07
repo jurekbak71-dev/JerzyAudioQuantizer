@@ -85,6 +85,9 @@ void JerzyAudioQuantizerAudioProcessor::prepareToPlay(double sr, int samplesPerB
     sampleRateHz = juce::jmax(1.0, sr);
     absoluteSamples = 0;
     fallbackPpq = 0.0;
+    lastHostSamplePosition = -1;
+    previousBlockSize = 0;
+    wasPlaying = false;
 
     detector.prepare(sampleRateHz);
     quantizer.prepare(sampleRateHz);
@@ -134,6 +137,8 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
 
     double bpm = 120.0;
     double blockPpq = fallbackPpq;
+    std::int64_t hostSamplePosition = -1;
+    bool hostPlaying = true;
 
     if (auto* playHead = getPlayHead())
     {
@@ -143,7 +148,30 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
                 bpm = juce::jlimit(20.0, 400.0, *v);
             if (auto v = pos->getPpqPosition())
                 blockPpq = *v;
+            if (auto v = pos->getTimeInSamples())
+                hostSamplePosition = *v;
+            hostPlaying = pos->getIsPlaying();
         }
+    }
+
+    // A loop, seek or fresh transport start invalidates buffered audio from the
+    // previous timeline position. Reset before capturing the new host block so
+    // no stale tail can appear as an echo after a transport jump.
+    bool transportJump = false;
+    if (hostPlaying && wasPlaying && hostSamplePosition >= 0 && lastHostSamplePosition >= 0)
+    {
+        const auto expected = lastHostSamplePosition + previousBlockSize;
+        transportJump = std::abs(hostSamplePosition - expected) > juce::jmax<std::int64_t>(8, numSamples * 2);
+    }
+
+    if ((hostPlaying && !wasPlaying) || transportJump)
+    {
+        detector.reset();
+        quantizer.prepare(sampleRateHz);
+        studioEngine.reset();
+        dynamics.reset();
+        absoluteSamples = 0;
+        fallbackPpq = blockPpq;
     }
 
     currentBpm.store(static_cast<float>(bpm), std::memory_order_relaxed);
@@ -219,6 +247,9 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
 
     absoluteSamples += numSamples;
     fallbackPpq = blockPpq + numSamples * bpm / (60.0 * sampleRateHz);
+    lastHostSamplePosition = hostSamplePosition;
+    previousBlockSize = numSamples;
+    wasPlaying = hostPlaying;
 }
 
 void JerzyAudioQuantizerAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
