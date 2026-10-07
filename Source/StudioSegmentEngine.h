@@ -36,7 +36,9 @@ public:
         tempIn.clear();
         tempOut.clear();
 
-        stretch.presetDefault(numChannels, sampleRate);
+        // Keep default-quality stretch, but spread spectral work across the interval.
+        // This lowers realtime CPU spikes at the cost of extra latency, which is acceptable here.
+        stretch.presetDefault(numChannels, sampleRate, true);
         stretch.reset();
 
         fixedLatencySamples = maxAnalysisSamples + stretch.inputLatency() + stretch.outputLatency();
