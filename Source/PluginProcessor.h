@@ -56,6 +56,9 @@ private:
     double sampleRateHz = 44100.0;
     std::int64_t absoluteSamples = 0;
     double fallbackPpq = 0.0;
+    std::int64_t lastHostSamplePosition = -1;
+    int previousBlockSize = 0;
+    bool wasPlaying = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyAudioQuantizerAudioProcessor)
 };
