@@ -1,0 +1,41 @@
+name: Build Audio Quantizer Windows VST3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Source/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-windows.yml'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build VST3
+        shell: pwsh
+        run: cmake --build build --config Release --target JerzyAudioQuantizer2_VST3 --parallel
+      - name: Package
+        shell: pwsh
+        run: |
+          $plugin = Get-ChildItem -Path build -Recurse -Directory -Filter "JERZY AUDIO QUANTIZER 2.vst3" | Select-Object -First 1
+          if (-not $plugin) { throw "JERZY AUDIO QUANTIZER 2.vst3 was not produced" }
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          Copy-Item -Recurse -Force $plugin.FullName "artifact/JERZY AUDIO QUANTIZER 2.vst3"
+          Compress-Archive -Path "artifact/JERZY AUDIO QUANTIZER 2.vst3" -DestinationPath "Jerzy-Audio-Quantizer-2-Windows-x64.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jerzy-Audio-Quantizer-2-Windows-x64-VST3
+          path: |
+            artifact/JERZY AUDIO QUANTIZER 2.vst3
+            Jerzy-Audio-Quantizer-2-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 90
