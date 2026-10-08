@@ -14,10 +14,10 @@ public:
         numChannels = juce::jlimit(1, 2, channels);
         maxBlock = juce::jmax(1, maxBlockSize);
 
-        baseLatencySamples = msToSamples(1200.0f);
+        baseLatencySamples = msToSamples(350.0f);
         maxCorrectionSamples = msToSamples(200.0f);
-        transitionSamples = juce::jmax(64, msToSamples(10.0f));
-        attackGuardSamples = msToSamples(22.0f);
+        transitionSamples = juce::jmax(64, msToSamples(8.0f));
+        attackGuardSamples = msToSamples(20.0f);
 
         const int capacity = baseLatencySamples + maxCorrectionSamples
                            + msToSamples(300.0f) + maxBlock * 4 + 256;
@@ -278,10 +278,10 @@ private:
     int numChannels = 2;
     int maxBlock = 512;
 
-    int baseLatencySamples = 52920;
+    int baseLatencySamples = 15435;
     int maxCorrectionSamples = 8820;
-    int transitionSamples = 441;
-    int attackGuardSamples = 970;
+    int transitionSamples = 353;
+    int attackGuardSamples = 882;
 
     juce::AudioBuffer<float> ring;
     int writePos = 0;
