@@ -59,6 +59,7 @@ private:
     std::int64_t lastHostSamplePosition = -1;
     int previousBlockSize = 0;
     bool wasPlaying = false;
+    bool wasEnabled = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JerzyAudioQuantizerAudioProcessor)
 };
