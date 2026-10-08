@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(JerzyAudioQuantizer2 VERSION 1.0.0)
+project(JerzyAudioQuantizer2 VERSION 1.1.0)
 
 include(FetchContent)
 
@@ -11,12 +11,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
-FetchContent_Declare(
-    SIGNALSMITH_STRETCH
-    GIT_REPOSITORY https://github.com/Signalsmith-Audio/signalsmith-stretch.git
-    GIT_TAG a670068d9aeb64913331d5cc29337b19a457a7df
-)
-FetchContent_MakeAvailable(SIGNALSMITH_STRETCH)
 
 juce_add_plugin(JerzyAudioQuantizer2
     COMPANY_NAME "Jerzy"
@@ -39,7 +33,6 @@ target_sources(JerzyAudioQuantizer2 PRIVATE
     Source/PluginProcessor.h
     Source/PluginEditor.cpp
     Source/PluginEditor.h
-    Source/JerzyVSTGuiKit.h
     Source/TransientDetector.h
     Source/QuantizerEngine.h
     Source/StudioSegmentEngine.h
@@ -59,7 +52,6 @@ target_link_libraries(JerzyAudioQuantizer2
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
-        signalsmith-stretch
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
