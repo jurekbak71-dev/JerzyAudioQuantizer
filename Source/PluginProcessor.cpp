@@ -83,6 +83,7 @@ void JerzyAudioQuantizerAudioProcessor::prepareToPlay(double sr, int samplesPerB
     lastHostSamplePosition = -1;
     previousBlockSize = 0;
     wasPlaying = false;
+    wasEnabled = false;
 
     detector.prepare(sampleRateHz);
     quantizer.prepare(sampleRateHz);
@@ -151,7 +152,9 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
                       > juce::jmax<std::int64_t>(8, numSamples * 2);
     }
 
-    if ((hostPlaying && !wasPlaying) || transportJump)
+    const bool justEnabled = enabled && !wasEnabled;
+
+    if ((hostPlaying && !wasPlaying) || transportJump || justEnabled)
     {
         detector.reset();
         quantizer.prepare(sampleRateHz);
@@ -235,6 +238,7 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
     lastHostSamplePosition = hostSamplePosition;
     previousBlockSize = numSamples;
     wasPlaying = hostPlaying;
+    wasEnabled = enabled;
 }
 
 void JerzyAudioQuantizerAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
