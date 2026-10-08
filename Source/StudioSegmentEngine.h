@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 class StudioSegmentEngine
 {
@@ -37,6 +38,7 @@ public:
         currentDelay = baseLatencySamples;
         oldDelay = currentDelay;
         targetDelay = currentDelay;
+        scheduledDelay = currentDelay;
 
         fadePos = 0;
         fadeLength = 0;
@@ -98,8 +100,10 @@ public:
         e.targetDelay = delay;
         e.targetOutput = targetOutput;
 
-        // Finish the delay change before the pick transient reaches the output.
-        e.startOutput = targetOutput - attackGuardSamples - transitionSamples;
+        // Move the read head in the quietest region before the next pick attack.
+        // Both heads still run at 1x, so pitch does not bend during correction.
+        const auto quietSource = findQuietSplice(inputSample);
+        e.startOutput = quietSource + scheduledDelay;
 
         if (e.startOutput <= absoluteOutput + transitionSamples)
             return false;
@@ -112,6 +116,7 @@ public:
         ++eventCount;
 
         lastScheduledTargetOutput = targetOutput;
+        scheduledDelay = delay;
         lastCorrectionSamples = correction;
 
         const float correctionNorm = static_cast<float>(std::abs(correction))
@@ -216,6 +221,41 @@ private:
         return ring.getSample(channel, static_cast<int>(idx));
     }
 
+    std::int64_t findQuietSplice(std::int64_t attackSample) const noexcept
+    {
+        const auto searchStart = juce::jmax<std::int64_t>(0, attackSample - msToSamples(80.0f));
+        const auto searchEnd = juce::jmax<std::int64_t>(searchStart, attackSample - attackGuardSamples);
+        const int window = juce::jmax(16, msToSamples(2.0f));
+        const int step = juce::jmax(8, window / 2);
+
+        if (searchEnd <= searchStart + window)
+            return juce::jmax<std::int64_t>(0, attackSample - attackGuardSamples - transitionSamples);
+
+        double bestEnergy = std::numeric_limits<double>::max();
+        std::int64_t best = searchEnd - window;
+
+        for (std::int64_t p = searchStart; p + window < searchEnd; p += step)
+        {
+            double energy = 0.0;
+            for (int i = 0; i < window; i += 4)
+            {
+                float mono = 0.0f;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    mono += readAbsolute(ch, p + i);
+                mono /= static_cast<float>(numChannels);
+                energy += static_cast<double>(mono) * static_cast<double>(mono);
+            }
+
+            if (energy < bestEnergy)
+            {
+                bestEnergy = energy;
+                best = p;
+            }
+        }
+
+        return best;
+    }
+
     void maybeStartScheduledTransition() noexcept
     {
         if (fadeLength > 0 || eventCount <= 0)
@@ -252,6 +292,7 @@ private:
     int currentDelay = 0;
     int oldDelay = 0;
     int targetDelay = 0;
+    int scheduledDelay = 0;
     int fadePos = 0;
     int fadeLength = 0;
 
