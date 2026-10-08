@@ -153,8 +153,9 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
     }
 
     const bool justEnabled = enabled && !wasEnabled;
+    const bool justDisabled = !enabled && wasEnabled;
 
-    if ((hostPlaying && !wasPlaying) || transportJump || justEnabled)
+    if ((hostPlaying && !wasPlaying) || transportJump || justEnabled || justDisabled)
     {
         detector.reset();
         quantizer.prepare(sampleRateHz);
@@ -224,7 +225,9 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
     }
     else
     {
-        // Dry monitoring when the internal switch is off.
+        // Correction off: keep the same fixed latency so host PDC remains valid.
+        // The engine has been reset to its base delay when the switch changed.
+        studioEngine.pullOutput(buffer);
         attackConfidence.store(0.0f, std::memory_order_relaxed);
         dynamicsReductionDb.store(0.0f, std::memory_order_relaxed);
     }
