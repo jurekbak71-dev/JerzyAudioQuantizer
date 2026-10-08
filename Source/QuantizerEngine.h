@@ -101,7 +101,7 @@ public:
         r.timingConfidence = juce::jlimit(0.0f, 1.0f,
             detectorConfidence * 0.68f + proximity * 0.32f);
 
-        if (r.timingConfidence < 0.50f)
+        if (r.timingConfidence < 0.43f)
             return r;
 
         const double corrected = deltaSamples
@@ -132,14 +132,17 @@ public:
 private:
     Grid chooseAutomaticGrid(double transientPpq) const noexcept
     {
-        constexpr std::array<Grid, 7> candidates {
+        // AUTO is deliberately conservative. Without enough rhythmic history
+        // it stays on 1/16 instead of jumping to a fine grid just because one
+        // transient happens to be close to it.
+        if (historyCount < 3)
+            return preferredGrid;
+
+        constexpr std::array<Grid, 4> candidates {
             Grid::eighth,
             Grid::sixteenth,
-            Grid::thirtySecond,
             Grid::eighthTriplet,
-            Grid::sixteenthTriplet,
-            Grid::shuffleEighth,
-            Grid::shuffleSixteenth
+            Grid::sixteenthTriplet
         };
 
         double bestScore = 1.0e9;
@@ -167,11 +170,6 @@ private:
             if (g == preferredGrid)
                 score *= 0.84;
 
-            if (g == Grid::thirtySecond)
-                score *= 1.16;
-
-            if (g == Grid::shuffleEighth || g == Grid::shuffleSixteenth)
-                score *= 1.05;
 
             if (score < bestScore)
             {

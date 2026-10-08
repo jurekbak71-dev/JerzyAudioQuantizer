@@ -9,7 +9,6 @@ namespace Param
     static constexpr auto grid = "grid";
     static constexpr auto strength = "strength";
     static constexpr auto window = "window";
-    static constexpr auto analysis = "analysis";
     static constexpr auto preserve = "preserve";
     static constexpr auto swing = "swing";
     static constexpr auto dynamics = "dynamics";
@@ -29,53 +28,49 @@ JerzyAudioQuantizerAudioProcessor::createParameterLayout()
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
 
     p.push_back(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID{Param::enabled, 2}, "Włącz poprawę rytmu", true));
+        juce::ParameterID{Param::enabled, 3}, "W\u0142\u0105cz korekcj\u0119 rytmu", true));
 
     p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::sensitivity, 2}, "Jak łatwo rozpoznaje uderzenie kostki",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.64f));
+        juce::ParameterID{Param::sensitivity, 3}, "Czu\u0142o\u015b\u0107 wykrywania ataku",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.62f));
 
     p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::threshold, 2}, "Poniżej jakiego poziomu ignoruje dźwięk",
+        juce::ParameterID{Param::threshold, 3}, "Pr\u00f3g ciszy i szumu",
         juce::NormalisableRange<float>(-72.0f, -18.0f, 0.1f), -48.0f, "dB"));
 
     p.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{Param::grid, 2}, "Do jakiego rytmu wyrównuje",
+        juce::ParameterID{Param::grid, 3}, "Siatka rytmiczna",
         juce::StringArray{
-            "AUTO — rozpoznaj z nagrania",
-            "Ćwierćnuty 1/4",
-            "Ósemki 1/8",
+            "AUTO",
+            "\u0106wier\u0107nuty 1/4",
+            "\u00d3semki 1/8",
             "Szesnastki 1/16",
-            "Trzydziestodwójki 1/32",
-            "Triole ósemkowe 1/8T",
+            "Trzydziestodw\u00f3jki 1/32",
+            "Triole \u00f3semkowe 1/8T",
             "Triole szesnastkowe 1/16T",
-            "Shuffle ósemkowy",
-            "Shuffle szesnastkowy"
+            "Shuffle 1/8",
+            "Shuffle 1/16"
         }, 0));
 
     p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::strength, 2}, "Jak mocno dociąga grę do rytmu",
-        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 88.0f, "%"));
+        juce::ParameterID{Param::strength, 3}, "Si\u0142a wyr\u00f3wnania do rytmu",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 78.0f, "%"));
 
     p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::window, 2}, "Jak duży błąd rytmu jeszcze naprawia",
-        juce::NormalisableRange<float>(5.0f, 180.0f, 0.1f, 0.6f), 85.0f, "ms"));
+        juce::ParameterID{Param::window, 3}, "Najwi\u0119kszy b\u0142\u0105d do naprawy",
+        juce::NormalisableRange<float>(5.0f, 160.0f, 0.1f, 0.65f), 75.0f, "ms"));
 
     p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::analysis, 2}, "Ile nagrania sprawdza przed decyzją",
-        juce::NormalisableRange<float>(250.0f, 1400.0f, 1.0f, 0.6f), 850.0f, "ms"));
+        juce::ParameterID{Param::preserve, 3}, "Ochrona ataku kostki",
+        juce::NormalisableRange<float>(8.0f, 45.0f, 0.1f), 22.0f, "ms"));
 
     p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::preserve, 2}, "Jak mocno chroni początek nuty",
-        juce::NormalisableRange<float>(0.0f, 45.0f, 0.1f), 18.0f, "ms"));
-
-    p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::swing, 2}, "Ile swingu dodaje do prostej siatki",
+        juce::ParameterID{Param::swing, 3}, "Swing",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 0.0f, "%"));
 
     p.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{Param::dynamics, 2}, "Jak mocno wyrównuje głośność uderzeń",
-        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 25.0f, "%"));
+        juce::ParameterID{Param::dynamics, 3}, "Wyr\u00f3wnanie dynamiki",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 15.0f, "%"));
 
     return { p.begin(), p.end() };
 }
@@ -88,16 +83,14 @@ void JerzyAudioQuantizerAudioProcessor::prepareToPlay(double sr, int samplesPerB
     lastHostSamplePosition = -1;
     previousBlockSize = 0;
     wasPlaying = false;
+    wasEnabled = false;
 
     detector.prepare(sampleRateHz);
     quantizer.prepare(sampleRateHz);
     studioEngine.prepare(sampleRateHz, samplesPerBlock, getTotalNumOutputChannels());
     dynamics.prepare(sampleRateHz);
 
-    // Report one stable studio latency. Parameter automation no longer causes
-    // host latency/PDC changes from inside processBlock().
     setLatencySamples(studioEngine.getLatencySamples());
-
     detectedAttacks = acceptedAttacks = rejectedAttacks = 0;
 }
 
@@ -114,7 +107,6 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
 
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
-
     if (numSamples <= 0 || numChannels <= 0)
         return;
 
@@ -124,14 +116,12 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
     const int gridIndex = static_cast<int>(apvts.getRawParameterValue(Param::grid)->load());
     const float strength = apvts.getRawParameterValue(Param::strength)->load() * 0.01f;
     const float windowMs = apvts.getRawParameterValue(Param::window)->load();
-    const float analysisMs = apvts.getRawParameterValue(Param::analysis)->load();
     const float preserveMs = apvts.getRawParameterValue(Param::preserve)->load();
     const float swing = apvts.getRawParameterValue(Param::swing)->load() * 0.01f;
     const float dynamicsAmount = apvts.getRawParameterValue(Param::dynamics)->load() * 0.01f;
 
     detector.setSensitivity(sensitivity);
     detector.setThresholdDb(threshold);
-    studioEngine.setAnalysisMs(analysisMs);
     studioEngine.setTransientPreserveMs(preserveMs);
     dynamics.setAmount(dynamicsAmount);
 
@@ -154,17 +144,18 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
         }
     }
 
-    // A loop, seek or fresh transport start invalidates buffered audio from the
-    // previous timeline position. Reset before capturing the new host block so
-    // no stale tail can appear as an echo after a transport jump.
     bool transportJump = false;
     if (hostPlaying && wasPlaying && hostSamplePosition >= 0 && lastHostSamplePosition >= 0)
     {
         const auto expected = lastHostSamplePosition + previousBlockSize;
-        transportJump = std::abs(hostSamplePosition - expected) > juce::jmax<std::int64_t>(8, numSamples * 2);
+        transportJump = std::abs(hostSamplePosition - expected)
+                      > juce::jmax<std::int64_t>(8, numSamples * 2);
     }
 
-    if ((hostPlaying && !wasPlaying) || transportJump)
+    const bool justEnabled = enabled && !wasEnabled;
+    const bool justDisabled = !enabled && wasEnabled;
+
+    if ((hostPlaying && !wasPlaying) || transportJump || justEnabled || justDisabled)
     {
         detector.reset();
         quantizer.prepare(sampleRateHz);
@@ -172,12 +163,14 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
         dynamics.reset();
         absoluteSamples = 0;
         fallbackPpq = blockPpq;
+        lastCorrectionMs.store(0.0f, std::memory_order_relaxed);
     }
 
     currentBpm.store(static_cast<float>(bpm), std::memory_order_relaxed);
     const std::int64_t blockAbsStart = absoluteSamples;
 
-    // The clean input is captured once. All decisions then reference this same timeline.
+    // Capture the clean block first. The output head is 1.2 s behind it,
+    // so every correction is known well before that audio reaches the output.
     studioEngine.pushInput(buffer);
 
     if (enabled)
@@ -213,12 +206,9 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
                 continue;
             }
 
-            const bool used = studioEngine.addAnchor(
-                blockAbsStart + i,
-                q.correctionSamples,
-                q.timingConfidence);
-
-            if (!used)
+            if (!studioEngine.addAnchor(blockAbsStart + i,
+                                        q.correctionSamples,
+                                        q.timingConfidence))
             {
                 rejectedAttacks.fetch_add(1, std::memory_order_relaxed);
                 continue;
@@ -230,15 +220,16 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
                 std::memory_order_relaxed);
         }
 
-        studioEngine.commitSafeAudio();
         studioEngine.pullOutput(buffer);
         dynamics.process(buffer);
     }
     else
     {
-        // Internal off means true dry monitoring. The plugin is intended primarily
-        // for rendered/studio use; host bypass can be used when latency-compensated A/B is required.
+        // Correction off: keep the same fixed latency so host PDC remains valid.
+        // The engine has been reset to its base delay when the switch changed.
+        studioEngine.pullOutput(buffer);
         attackConfidence.store(0.0f, std::memory_order_relaxed);
+        dynamicsReductionDb.store(0.0f, std::memory_order_relaxed);
     }
 
     lastStretchRatio.store(studioEngine.getLastStretchRatio(), std::memory_order_relaxed);
@@ -250,6 +241,7 @@ void JerzyAudioQuantizerAudioProcessor::processBlock(juce::AudioBuffer<float>& b
     lastHostSamplePosition = hostSamplePosition;
     previousBlockSize = numSamples;
     wasPlaying = hostPlaying;
+    wasEnabled = enabled;
 }
 
 void JerzyAudioQuantizerAudioProcessor::getStateInformation(juce::MemoryBlock& destData)

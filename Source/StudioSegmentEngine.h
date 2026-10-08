@@ -1,9 +1,9 @@
 #pragma once
 #include <JuceHeader.h>
-#include <signalsmith-stretch/signalsmith-stretch.h>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 class StudioSegmentEngine
 {
@@ -14,312 +14,294 @@ public:
         numChannels = juce::jlimit(1, 2, channels);
         maxBlock = juce::jmax(1, maxBlockSize);
 
-        maxAnalysisSamples = msToSamples(1400.0f);
-        analysisSamples = msToSamples(850.0f);
-        transientPreserveSamples = msToSamples(18.0f);
-        crossfadeSamples = juce::jmax(16, msToSamples(5.0f));
+        baseLatencySamples = msToSamples(350.0f);
+        maxCorrectionSamples = msToSamples(200.0f);
+        transitionSamples = juce::jmax(64, msToSamples(8.0f));
+        attackGuardSamples = msToSamples(20.0f);
 
-        // Sized to the real studio use case rather than allocating 30 seconds
-        // worth of stereo audio as the previous implementation effectively did.
-        const int inCap = maxAnalysisSamples + msToSamples(2400.0f) + maxBlock + 128;
-        const int outCap = maxAnalysisSamples + msToSamples(3200.0f) + maxBlock + 128;
-        const int tempInCap = msToSamples(2400.0f) + maxBlock;
-        const int tempOutCap = msToSamples(3100.0f) + maxBlock;
+        const int capacity = baseLatencySamples + maxCorrectionSamples
+                           + msToSamples(300.0f) + maxBlock * 4 + 256;
 
-        inputRing.setSize(numChannels, inCap, false, true, true);
-        outputRing.setSize(numChannels, outCap, false, true, true);
-        tempIn.setSize(numChannels, tempInCap, false, true, true);
-        tempOut.setSize(numChannels, tempOutCap, false, true, true);
+        ring.setSize(numChannels, capacity, false, true, true);
+        ring.clear();
 
-        inputRing.clear();
-        outputRing.clear();
-        tempIn.clear();
-        tempOut.clear();
-
-        // Keep default-quality stretch, but spread spectral work across the interval.
-        // This lowers realtime CPU spikes at the cost of extra latency, which is acceptable here.
-        stretch.presetDefault(numChannels, sampleRate, true);
-        stretch.reset();
-
-        fixedLatencySamples = maxAnalysisSamples + stretch.inputLatency() + stretch.outputLatency();
-        resetTimeline();
+        reset();
     }
 
     void reset()
     {
-        inputRing.clear();
-        outputRing.clear();
-        tempIn.clear();
-        tempOut.clear();
-        stretch.reset();
-        resetTimeline();
+        ring.clear();
+        writePos = 0;
+        absoluteInput = 0;
+        absoluteOutput = 0;
+
+        currentDelay = baseLatencySamples;
+        oldDelay = currentDelay;
+        targetDelay = currentDelay;
+        scheduledDelay = currentDelay;
+
+        fadePos = 0;
+        fadeLength = 0;
+
+        eventRead = 0;
+        eventWrite = 0;
+        eventCount = 0;
+
+        lastScheduledTargetOutput = -1;
+        lastCorrectionSamples = 0;
+        artifactRisk = 0.0f;
     }
 
-    void setAnalysisMs(float ms) noexcept
-    {
-        analysisSamples = juce::jlimit(msToSamples(250.0f), maxAnalysisSamples,
-                                      msToSamples(juce::jlimit(250.0f, 1400.0f, ms)));
-    }
+    void setAnalysisMs(float) noexcept {}
 
     void setTransientPreserveMs(float ms) noexcept
     {
-        transientPreserveSamples = msToSamples(juce::jlimit(0.0f, 45.0f, ms));
+        attackGuardSamples = msToSamples(juce::jlimit(8.0f, 45.0f, ms));
     }
 
     int getLatencySamples() const noexcept
     {
-        // Constant latency prevents repeated host/PDC reconfiguration while audio runs.
-        return fixedLatencySamples;
+        return baseLatencySamples;
     }
 
     void pushInput(const juce::AudioBuffer<float>& buffer) noexcept
     {
         const int n = buffer.getNumSamples();
-        const int sourceChannels = buffer.getNumChannels();
+        const int inChannels = buffer.getNumChannels();
 
         for (int i = 0; i < n; ++i)
         {
             for (int ch = 0; ch < numChannels; ++ch)
-                inputRing.setSample(ch, inputWrite,
-                    buffer.getSample(juce::jmin(ch, sourceChannels - 1), i));
+                ring.setSample(ch, writePos,
+                    buffer.getSample(juce::jmin(ch, inChannels - 1), i));
 
-            inputWrite = (inputWrite + 1) % inputRing.getNumSamples();
+            writePos = (writePos + 1) % ring.getNumSamples();
             ++absoluteInput;
         }
     }
 
-    bool addAnchor(std::int64_t inputSample, int correctionSamples, float confidence)
+    bool addAnchor(std::int64_t inputSample, int correctionSamples, float confidence) noexcept
     {
         if (confidence < 0.50f)
             return false;
 
-        const std::int64_t target = inputSample + correctionSamples;
+        const int correction = juce::jlimit(-maxCorrectionSamples,
+                                            maxCorrectionSamples,
+                                            correctionSamples);
 
-        if (inputSample <= committedInput + minAnchorSpacingSamples())
+        const int delay = baseLatencySamples + correction;
+        const std::int64_t targetOutput = inputSample + delay;
+
+        if (lastScheduledTargetOutput >= 0
+            && targetOutput <= lastScheduledTargetOutput + msToSamples(18.0f))
             return false;
 
-        if (target <= committedTarget + minAnchorSpacingSamples())
+        Event e;
+        e.targetDelay = delay;
+        e.targetOutput = targetOutput;
+
+        // Move the read head in the quietest region before the next pick attack.
+        // Both heads still run at 1x, so pitch does not bend during correction.
+        const auto quietSource = findQuietSplice(inputSample);
+        e.startOutput = quietSource + scheduledDelay;
+
+        if (e.startOutput <= absoluteOutput + transitionSamples)
             return false;
 
-        const auto inLen = inputSample - committedInput;
-        const auto requestedOutLen = target - committedTarget;
-
-        if (inLen <= 0 || requestedOutLen <= 0)
+        if (eventCount >= static_cast<int>(events.size()))
             return false;
 
-        // Keep segment ratios in the range where the stretcher remains transparent.
-        // Large corrections are automatically softened instead of producing warble/glitches.
-        const double requestedRatio = static_cast<double>(requestedOutLen) / static_cast<double>(inLen);
-        const double safeRatio = juce::jlimit(0.78, 1.28, requestedRatio);
-        const std::int64_t safeTarget = committedTarget
-            + static_cast<std::int64_t>(std::llround(static_cast<double>(inLen) * safeRatio));
+        events[static_cast<size_t>(eventWrite)] = e;
+        eventWrite = (eventWrite + 1) % static_cast<int>(events.size());
+        ++eventCount;
 
-        if (!processSegment(committedInput, inputSample, committedTarget, safeTarget))
-            return false;
+        lastScheduledTargetOutput = targetOutput;
+        scheduledDelay = delay;
+        lastCorrectionSamples = correction;
 
-        committedInput = inputSample;
-        committedTarget = safeTarget;
+        const float correctionNorm = static_cast<float>(std::abs(correction))
+                                   / static_cast<float>(juce::jmax(1, maxCorrectionSamples));
+        artifactRisk = juce::jlimit(0.0f, 1.0f, correctionNorm * 0.75f);
 
-        lastStretchRatio = static_cast<float>(safeRatio);
-        const float ratioRisk = std::abs(lastStretchRatio - 1.0f) / 0.28f;
-        const float correctionRisk = static_cast<float>(
-            std::abs(static_cast<double>(safeTarget - target))
-            / juce::jmax(1.0, static_cast<double>(inLen) * 0.20));
-        artifactRisk = juce::jlimit(0.0f, 1.0f, 0.82f * ratioRisk + 0.18f * correctionRisk);
         return true;
     }
 
-    void commitSafeAudio()
-    {
-        const std::int64_t safe = absoluteInput - analysisSamples;
-        if (safe <= committedInput)
-            return;
-
-        const std::int64_t delta = safe - committedInput;
-        if (processSegment(committedInput, safe, committedTarget, committedTarget + delta))
-        {
-            committedInput = safe;
-            committedTarget += delta;
-        }
-    }
+    void commitSafeAudio() noexcept {}
 
     void pullOutput(juce::AudioBuffer<float>& buffer) noexcept
     {
-        buffer.clear();
-        const int n = buffer.getNumSamples();
+        const int samples = buffer.getNumSamples();
+        const int channels = juce::jmin(numChannels, buffer.getNumChannels());
 
-        for (int i = 0; i < n; ++i)
+        for (int i = 0; i < samples; ++i)
         {
-            if (latencyHold > 0)
+            maybeStartScheduledTransition();
+
+            float gOld = 0.0f;
+            float gNew = 1.0f;
+
+            if (fadeLength > 0)
             {
-                --latencyHold;
-                continue;
+                const float t = juce::jlimit(0.0f, 1.0f,
+                    static_cast<float>(fadePos) / static_cast<float>(fadeLength));
+
+                gOld = std::cos(t * juce::MathConstants<float>::halfPi);
+                gNew = std::sin(t * juce::MathConstants<float>::halfPi);
             }
 
-            if (outputAvailable <= 0)
-                continue;
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                const float newer = readAbsolute(ch, absoluteOutput - targetDelay);
 
-            for (int ch = 0; ch < juce::jmin(numChannels, buffer.getNumChannels()); ++ch)
-                buffer.setSample(ch, i, outputRing.getSample(ch, outputRead));
+                float y = newer;
+                if (fadeLength > 0)
+                {
+                    const float older = readAbsolute(ch, absoluteOutput - oldDelay);
+                    y = older * gOld + newer * gNew;
+                }
 
-            outputRead = (outputRead + 1) % outputRing.getNumSamples();
-            --outputAvailable;
+                buffer.setSample(ch, i, y);
+            }
+
+            if (fadeLength > 0)
+            {
+                ++fadePos;
+                if (fadePos >= fadeLength)
+                {
+                    currentDelay = targetDelay;
+                    oldDelay = currentDelay;
+                    fadePos = 0;
+                    fadeLength = 0;
+                }
+            }
+
+            ++absoluteOutput;
         }
     }
 
-    float getLastStretchRatio() const noexcept { return lastStretchRatio; }
+    float getLastStretchRatio() const noexcept
+    {
+        // GUI compatibility: 1.0 means no timing move.
+        return 1.0f + static_cast<float>(lastCorrectionSamples)
+                    / static_cast<float>(juce::jmax(1, baseLatencySamples));
+    }
+
     float getArtifactRisk() const noexcept { return artifactRisk; }
 
 private:
+    struct Event
+    {
+        std::int64_t startOutput = 0;
+        std::int64_t targetOutput = 0;
+        int targetDelay = 0;
+    };
+
     int msToSamples(float ms) const noexcept
     {
-        return static_cast<int>(std::llround(0.001 * static_cast<double>(ms) * sampleRate));
+        return static_cast<int>(std::llround(
+            0.001 * static_cast<double>(ms) * sampleRate));
     }
 
-    int minAnchorSpacingSamples() const noexcept
+    float readAbsolute(int channel, std::int64_t absoluteSample) const noexcept
     {
-        return juce::jmax(16, msToSamples(24.0f));
-    }
+        if (absoluteSample < 0)
+            return 0.0f;
 
-    void resetTimeline() noexcept
-    {
-        inputWrite = outputWrite = outputRead = 0;
-        absoluteInput = 0;
-        committedInput = 0;
-        committedTarget = 0;
-        outputAvailable = 0;
-        latencyHold = fixedLatencySamples;
-        lastStretchRatio = 1.0f;
-        artifactRisk = 0.0f;
-    }
+        const std::int64_t oldestAvailable =
+            absoluteInput - static_cast<std::int64_t>(ring.getNumSamples());
 
-    float readInput(int ch, std::int64_t absolutePos) const noexcept
-    {
-        const auto cap = static_cast<std::int64_t>(inputRing.getNumSamples());
-        std::int64_t idx = absolutePos % cap;
+        if (absoluteSample < oldestAvailable || absoluteSample >= absoluteInput)
+            return 0.0f;
+
+        const auto cap = static_cast<std::int64_t>(ring.getNumSamples());
+        std::int64_t idx = absoluteSample % cap;
         if (idx < 0)
             idx += cap;
-        return inputRing.getSample(ch, static_cast<int>(idx));
+
+        return ring.getSample(channel, static_cast<int>(idx));
     }
 
-    void writeOutputSample(int ch, float sample) noexcept
+    std::int64_t findQuietSplice(std::int64_t attackSample) const noexcept
     {
-        outputRing.setSample(ch, outputWrite, sample);
-    }
+        const auto searchStart = juce::jmax<std::int64_t>(0, attackSample - msToSamples(80.0f));
+        const auto searchEnd = juce::jmax<std::int64_t>(searchStart, attackSample - attackGuardSamples);
+        const int window = juce::jmax(16, msToSamples(2.0f));
+        const int step = juce::jmax(8, window / 2);
 
-    void advanceOutputWrite() noexcept
-    {
-        outputWrite = (outputWrite + 1) % outputRing.getNumSamples();
+        if (searchEnd <= searchStart + window)
+            return juce::jmax<std::int64_t>(0, attackSample - attackGuardSamples - transitionSamples);
 
-        if (outputAvailable < outputRing.getNumSamples() - 1)
+        double bestEnergy = std::numeric_limits<double>::max();
+        std::int64_t best = searchEnd - window;
+
+        for (std::int64_t p = searchStart; p + window < searchEnd; p += step)
         {
-            ++outputAvailable;
-        }
-        else
-        {
-            // Should not occur with normal DAW transport, but never overwrite unread
-            // audio without advancing the read pointer as well.
-            outputRead = (outputRead + 1) % outputRing.getNumSamples();
-        }
-    }
-
-    bool processSegment(std::int64_t inStart, std::int64_t inEnd,
-                        std::int64_t outStart, std::int64_t outEnd)
-    {
-        juce::ignoreUnused(outStart);
-
-        const auto inLen64 = inEnd - inStart;
-        const auto outLen64 = outEnd - outStart;
-        if (inLen64 <= 0 || outLen64 <= 0)
-            return false;
-
-        if (inLen64 > tempIn.getNumSamples() || outLen64 > tempOut.getNumSamples())
-            return false;
-
-        const int inLen = static_cast<int>(inLen64);
-        const int outLen = static_cast<int>(outLen64);
-
-        for (int ch = 0; ch < numChannels; ++ch)
-            for (int i = 0; i < inLen; ++i)
-                tempIn.setSample(ch, i, readInput(ch, inStart + i));
-
-        std::array<const float*, 2> inPtrs {};
-        std::array<float*, 2> outPtrs {};
-
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            inPtrs[static_cast<size_t>(ch)] = tempIn.getReadPointer(ch);
-            outPtrs[static_cast<size_t>(ch)] = tempOut.getWritePointer(ch);
-        }
-
-        // No heap allocation occurs here. The full segment is always passed through
-        // the stretcher so its phase/history stays continuous between anchors.
-        stretch.process(inPtrs.data(), inLen, outPtrs.data(), outLen);
-
-        const int protect = juce::jlimit(0, juce::jmin(inLen - 1, outLen - 1),
-                                         transientPreserveSamples);
-        const int fade = juce::jmin(crossfadeSamples, protect);
-        const int fadeStart = protect - fade;
-
-        for (int i = 0; i < outLen; ++i)
-        {
-            for (int ch = 0; ch < numChannels; ++ch)
+            double energy = 0.0;
+            for (int i = 0; i < window; i += 4)
             {
-                float y = tempOut.getSample(ch, i);
-
-                // The segment starts exactly on a previously accepted attack.
-                // Copy the leading attack at 1x, then equal-power blend into the
-                // stretched sustain while the stretcher still receives the full segment.
-                if (i < protect && i < inLen)
-                {
-                    const float dryAttack = readInput(ch, inStart + i);
-
-                    if (i < fadeStart || fade <= 1)
-                    {
-                        y = dryAttack;
-                    }
-                    else
-                    {
-                        const float t = static_cast<float>(i - fadeStart)
-                                      / static_cast<float>(juce::jmax(1, fade));
-                        const float dryGain = std::cos(t * juce::MathConstants<float>::halfPi);
-                        const float wetGain = std::sin(t * juce::MathConstants<float>::halfPi);
-                        y = dryAttack * dryGain + y * wetGain;
-                    }
-                }
-
-                writeOutputSample(ch, y);
+                float mono = 0.0f;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    mono += readAbsolute(ch, p + i);
+                mono /= static_cast<float>(numChannels);
+                energy += static_cast<double>(mono) * static_cast<double>(mono);
             }
 
-            advanceOutputWrite();
+            if (energy < bestEnergy)
+            {
+                bestEnergy = energy;
+                best = p;
+            }
         }
 
-        return true;
+        return best;
+    }
+
+    void maybeStartScheduledTransition() noexcept
+    {
+        if (fadeLength > 0 || eventCount <= 0)
+            return;
+
+        const auto& e = events[static_cast<size_t>(eventRead)];
+        if (absoluteOutput < e.startOutput)
+            return;
+
+        oldDelay = currentDelay;
+        targetDelay = e.targetDelay;
+        fadePos = 0;
+        fadeLength = transitionSamples;
+
+        eventRead = (eventRead + 1) % static_cast<int>(events.size());
+        --eventCount;
     }
 
     double sampleRate = 44100.0;
     int numChannels = 2;
     int maxBlock = 512;
 
-    int maxAnalysisSamples = 61740;
-    int analysisSamples = 37485;
-    int transientPreserveSamples = 794;
-    int crossfadeSamples = 220;
-    int fixedLatencySamples = 0;
+    int baseLatencySamples = 15435;
+    int maxCorrectionSamples = 8820;
+    int transitionSamples = 353;
+    int attackGuardSamples = 882;
 
-    juce::AudioBuffer<float> inputRing, outputRing, tempIn, tempOut;
-    int inputWrite = 0;
-    int outputWrite = 0;
-    int outputRead = 0;
-    int outputAvailable = 0;
-    int latencyHold = 0;
+    juce::AudioBuffer<float> ring;
+    int writePos = 0;
 
     std::int64_t absoluteInput = 0;
-    std::int64_t committedInput = 0;
-    std::int64_t committedTarget = 0;
+    std::int64_t absoluteOutput = 0;
 
-    float lastStretchRatio = 1.0f;
+    int currentDelay = 0;
+    int oldDelay = 0;
+    int targetDelay = 0;
+    int scheduledDelay = 0;
+    int fadePos = 0;
+    int fadeLength = 0;
+
+    std::array<Event, 96> events {};
+    int eventRead = 0;
+    int eventWrite = 0;
+    int eventCount = 0;
+
+    std::int64_t lastScheduledTargetOutput = -1;
+    int lastCorrectionSamples = 0;
     float artifactRisk = 0.0f;
-
-    signalsmith::stretch::SignalsmithStretch<float> stretch;
 };
