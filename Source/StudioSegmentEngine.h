@@ -16,7 +16,8 @@ public:
 
         baseLatencySamples = msToSamples(350.0f);
         maxCorrectionSamples = msToSamples(200.0f);
-        transitionSamples = juce::jmax(64, msToSamples(8.0f));
+        // A longer splice suppresses isolated pick transients and high-frequency clicks.
+        transitionSamples = juce::jmax(64, msToSamples(18.0f));
         attackGuardSamples = msToSamples(20.0f);
 
         const int capacity = baseLatencySamples + maxCorrectionSamples
@@ -90,10 +91,18 @@ public:
                                             correctionSamples);
 
         const int delay = baseLatencySamples + correction;
+        // Reapplying the same read-head offset used to create unnecessary
+        // crossfades and comb filtering even when timing did not change.
+        if (std::abs(delay - scheduledDelay) < juce::jmax(2, msToSamples(0.25f)))
+        {
+            lastCorrectionSamples = correction;
+            artifactRisk = 0.0f;
+            return true;
+        }
         const std::int64_t targetOutput = inputSample + delay;
 
         if (lastScheduledTargetOutput >= 0
-            && targetOutput <= lastScheduledTargetOutput + msToSamples(18.0f))
+            && targetOutput <= lastScheduledTargetOutput + msToSamples(60.0f))
             return false;
 
         Event e;
@@ -145,8 +154,12 @@ public:
                 const float t = juce::jlimit(0.0f, 1.0f,
                     static_cast<float>(fadePos) / static_cast<float>(fadeLength));
 
-                gOld = std::cos(t * juce::MathConstants<float>::halfPi);
-                gNew = std::sin(t * juce::MathConstants<float>::halfPi);
+                // Complementary linear fades avoid a +3 dB bump when the
+                // old and new reads contain highly correlated guitar audio.
+                // Smoothstep avoids derivative discontinuities at endpoints.
+                const float smooth = t * t * (3.0f - 2.0f * t);
+                gOld = 1.0f - smooth;
+                gNew = smooth;
             }
 
             for (int ch = 0; ch < channels; ++ch)
@@ -239,11 +252,13 @@ private:
             double energy = 0.0;
             for (int i = 0; i < window; i += 4)
             {
-                float mono = 0.0f;
+                // Analyse each channel's energy separately: L/R with opposite
+                // polarity should not falsely appear silent at the splice.
                 for (int ch = 0; ch < numChannels; ++ch)
-                    mono += readAbsolute(ch, p + i);
-                mono /= static_cast<float>(numChannels);
-                energy += static_cast<double>(mono) * static_cast<double>(mono);
+                {
+                    const double x = readAbsolute(ch, p + i);
+                    energy += x * x;
+                }
             }
 
             if (energy < bestEnergy)
