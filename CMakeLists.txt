@@ -61,3 +61,13 @@ target_link_libraries(JerzyAudioQuantizer2
 if (MSVC)
     target_compile_options(JerzyAudioQuantizer2 PRIVATE /utf-8)
 endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    juce_add_console_app(QuantizerSegmentTests PRODUCT_NAME "Quantizer Segment Regression")
+    juce_generate_juce_header(QuantizerSegmentTests)
+    target_sources(QuantizerSegmentTests PRIVATE tests/SegmentSafetyTests.cpp Source/StudioSegmentEngine.h)
+    target_include_directories(QuantizerSegmentTests PRIVATE Source)
+    target_link_libraries(QuantizerSegmentTests PRIVATE juce::juce_audio_utils)
+    add_test(NAME QuantizerStereoSplice COMMAND QuantizerSegmentTests)
+endif()
